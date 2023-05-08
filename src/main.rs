@@ -23,8 +23,7 @@ fn main() {
     }*/
 
     let mut gameboy: Gameboy = Gameboy::new();
-    //gameboy.init();
-    //let gameboy: &mut Gameboy = &mut gameboy;
+    gameboy.init();
     gameboy.run();
 }
 
