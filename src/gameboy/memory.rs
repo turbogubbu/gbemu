@@ -1,6 +1,6 @@
 #[derive(Debug)]
 pub struct Memory {
-    data: [u8; 0x10000],
+    pub data: [u8; 0x10000],
 }
 
 impl Memory {
@@ -8,12 +8,18 @@ impl Memory {
         Memory { data: [0; 0x10000] }
     }
 
-    pub fn write(&mut self, address: u16, byte: u8) {
-        self.data[address as usize] = byte;
+    pub fn get_lcd_control(&self) -> u8 {
+        self.data[0xff40]
     }
 
-    pub fn read(&self, address: u16) -> u8 {
-        self.data[address as usize]
+    pub fn get_oam_entry(&self, index: u8) -> [u8; 4] {
+        assert!(index < 40, "OAM index has to be lower than 40!");
+        [
+            self.data[(0xfe00 + (index as usize) * 4) as usize],
+            self.data[(0xfe01 + (index as usize) * 4) as usize],
+            self.data[(0xfe02 + (index as usize) * 4) as usize],
+            self.data[(0xfe03 + (index as usize) * 4) as usize],
+        ]
     }
 
     pub fn print(&self, start_address: u16, len: u16) {
