@@ -5,8 +5,11 @@ use sdl2::render::WindowCanvas;
 
 //use super::Display::display;
 
+pub const DIMENSIONS: usize = 160 * 144;
+
 pub struct Display {
-    pixel: Vec<u8>,
+    //pixel: Vec<u8>,
+    pixel_buffer: [u8; DIMENSIONS],
     lcd_control: u8,
     lcd_status: u8,
 }
@@ -14,45 +17,17 @@ pub struct Display {
 impl Display {
     pub fn new() -> Display {
         Display {
-            pixel: vec![0; 160 * 144],
+            pixel_buffer: [0; DIMENSIONS],
             lcd_control: 0,
             lcd_status: 0,
         }
     }
 
     pub fn init(&mut self) {
-        let sdl_context = sdl2::init().unwrap();
-        let video_subsystem = sdl_context.video().unwrap();
-
-        let window = video_subsystem
-            .window("gbemu", 800, 600)
-            .position_centered()
-            .build()
-            .expect("could not initialize video subsystem");
-
-        let mut canvas = window.into_canvas().build().expect("could not make canvas");
-
-        let mut event_pump = sdl_context.event_pump().unwrap();
-
-        'running: loop {
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. }
-                    | Event::KeyDown {
-                        keycode: Some(Keycode::Escape),
-                        ..
-                    } => {
-                        break 'running;
-                    }
-                    _ => {}
-                }
-            }
-
-            canvas.set_draw_color(Color::RGB(255, 32, 64));
-            canvas.clear();
-            canvas.present();
-        }
+        //sdl_context = sdl2::init().unwrap();
     }
+
+    pub fn update_frame(&mut self) {}
 }
 
 struct Tile {
