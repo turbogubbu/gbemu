@@ -19,6 +19,10 @@ impl Cpu {
         }
     }
 
+    pub fn get_uptime(&self) -> u64 {
+        self.uptime
+    }
+
     pub fn print_status(&self) {
         print!("Cpu status:\n {}\n", self.registers);
         print!(" Cycles: {}\n", self.uptime);

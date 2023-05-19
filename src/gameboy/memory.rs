@@ -22,6 +22,12 @@ impl Memory {
         ]
     }
 
+    pub fn load_rom(&mut self, rom: Vec<u8>) {
+        for i in 0..rom.len() {
+            self.data[i] = rom[i];
+        }
+    }
+
     pub fn print(&self, start_address: u16, len: u16) {
         println!("        00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
 
