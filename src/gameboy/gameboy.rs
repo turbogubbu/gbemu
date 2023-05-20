@@ -1,6 +1,7 @@
 use std::fs;
 
 use crate::gameboy::cpu::Cpu;
+use crate::gameboy::display::Display;
 use crate::gameboy::memory::Memory;
 use crate::gameboy::ppu::Ppu;
 
@@ -8,6 +9,7 @@ pub struct Gameboy {
     cpu: Cpu,
     memory: Memory,
     ppu: Ppu,
+    display: Display,
 }
 
 impl Gameboy {
@@ -16,6 +18,7 @@ impl Gameboy {
             cpu: Cpu::new(),
             memory: Memory::new(),
             ppu: Ppu::new(),
+            display: Display::new(),
         }
     }
 
@@ -24,54 +27,22 @@ impl Gameboy {
         self.cpu
             .load_boot_rom(fs::read("roms/boot.gb").unwrap(), &mut self.memory.data);
         self.cpu.print_status();
+        self.display.init(&self.memory.data);
     }
 
     pub fn run(&mut self) {
         loop {
             self.cpu.execute_single_instruction(&mut self.memory.data);
 
-            if self.cpu.get_uptime() % 456 == 0 {
-                self.ppu.draw_line(&mut self.memory.data);
-            }
-            /*self.memory.print(0x9800, 0x3ff);
-            //self.cpu.print_status();
-
-            for i in 0..40 {
-                if self.memory.get_oam_entry(i)[0] != 0 {
-                    println!(
-                        "OAM entry y-pos at index {}: {}",
-                        i,
-                        self.memory.get_oam_entry(0)[0]
-                    );
-                    panic!();
-                }
-                if self.memory.get_oam_entry(i)[1] != 0 {
-                    println!(
-                        "OAM entry y-pos at index {}: {}",
-                        i,
-                        self.memory.get_oam_entry(0)[0]
-                    );
-                    panic!();
-                }
-                if self.memory.get_oam_entry(i)[2] != 0 {
-                    println!(
-                        "OAM entry y-pos at index {}: {}",
-                        i,
-                        self.memory.get_oam_entry(0)[0]
-                    );
-                    panic!();
-                }
-                if self.memory.get_oam_entry(i)[3] != 0 {
-                    println!(
-                        "OAM entry y-pos at index {}: {}",
-                        i,
-                        self.memory.get_oam_entry(0)[0]
-                    );
-                    panic!();
-                }
+            if self.cpu.draw_line() {
+                self.ppu
+                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer);
             }
 
-            println!("LCDControl: {:02x}", self.memory.get_lcd_control());*/
+            if self.cpu.draw_image() {
+                self.display.update_frame();
+                println!("Drawing frame!");
+            }
         }
     }
 }
