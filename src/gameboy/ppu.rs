@@ -9,9 +9,9 @@ impl Ppu {
     }
 
     pub fn draw_line(&mut self, mem: &mut [u8; 0x10000], pixel_buff: &mut [u8; DIMENSIONS]) {
-        self.oam_scan(mem);
-        self.draw_pixels();
+        self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
+        // self.increment_lcd_y(mem);
     }
 
     fn get_lcd_y(&self, mem: &[u8; 0x10000]) -> u8 {
@@ -26,11 +26,15 @@ impl Ppu {
         mem[0xff40]
     }
 
-    fn get_oam_table(&mut self, mem: &[u8; 0x10000]) -> &[u8] {
-        &mem[0xfe00..0xfea0]
+    fn get_oam_table(&self, mem: &[u8; 0x10000]) -> [u8; 0xa0] {
+        let mut oam: [u8; 0xa0] = [0; 0xa0];
+        for i in 0xfe00..0xfea0 {
+            oam[i - 0xfe00] = mem[i];
+        }
+        oam
     }
 
-    fn oam_scan(&mut self, mem: &[u8; 0x10000]) -> Vec<OAM> {
+    fn oam_scan(&self, mem: &[u8; 0x10000]) -> Vec<OAM> {
         let oam_table = self.get_oam_table(mem);
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
         let obj_size: u8 = if lcd_control.obj_size { 16 } else { 8 };
@@ -54,11 +58,20 @@ impl Ppu {
                 break;
             }
         }
-
         active_oam
     }
 
-    fn draw_pixels(&mut self) {}
+    fn draw_pixels(
+        &mut self,
+        mem: &[u8; 0x10000],
+        pixel_buff: &mut [u8; DIMENSIONS],
+        sprites: Vec<OAM>,
+    ) {
+        let mut line: [u8; 160] = [0; 160];
+        for sprite in sprites {
+            println!("drawing pixel");
+        }
+    }
 
     fn horizontal_blank(&mut self) {}
 }
@@ -84,6 +97,38 @@ impl OAM {
         }
     }
 }
+
+#[derive(Debug)]
+pub struct Tile([u8; 16]);
+
+impl Tile {
+    pub fn new(data: [u8; 16]) -> Tile {
+        Tile(data)
+    }
+
+    pub fn get_pixel(&self) -> [u8; 8 * 8] {
+        let mut pixels: [u8; 8 * 8] = [0; 8 * 8];
+
+        for i in 0..8usize {
+            let lsbyte: u8 = self.0[i * 2];
+            let msbyte: u8 = self.0[i * 2 + 1];
+            for n in 0..8usize {
+                let lsbit: bool = if (lsbyte & (1 << n)) > 0 { true } else { false };
+                let msbit: bool = if (msbyte & (1 << n)) > 0 { true } else { false };
+                pixels[i * 8 + n] = if msbit { 2 } else { 0 } + if lsbit { 2 } else { 0 };
+            }
+        }
+
+        pixels
+    }
+}
+
+#[derive(Debug)]
+struct TileMap {
+    tile_indexes: Vec<u8>,
+}
+
+impl TileMap {}
 
 #[derive(Debug)]
 struct LcdControl {

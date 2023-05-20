@@ -8,6 +8,8 @@ pub struct Cpu {
     registers: Registers,
     uptime: u64,
     prefixed: bool,
+    draw_line: bool,
+    draw_image: bool,
 }
 
 impl Cpu {
@@ -16,11 +18,21 @@ impl Cpu {
             registers: Registers::new(),
             uptime: 0,
             prefixed: false,
+            draw_line: false,
+            draw_image: false,
         }
     }
 
     pub fn get_uptime(&self) -> u64 {
         self.uptime
+    }
+
+    pub fn draw_line(&self) -> bool {
+        self.draw_line
+    }
+
+    pub fn draw_image(&self) -> bool {
+        self.draw_image
     }
 
     pub fn print_status(&self) {
@@ -49,6 +61,19 @@ impl Cpu {
         self.execute_instruction(instruction, mem);
         self.increment_pc(&instruction.op_type, instruction.bytes);
         self.set_flags(&instruction.flags);
+
+        self.draw_line = if ((self.get_uptime() % 456) + instruction.cycles as u64) > 456 {
+            true
+        } else {
+            false
+        };
+
+        self.draw_image = if ((self.get_uptime() % 70224) + instruction.cycles as u64) > 70224 {
+            true
+        } else {
+            false
+        };
+
         self.increase_uptime(instruction.cycles);
     }
 
