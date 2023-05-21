@@ -10,6 +10,7 @@ pub struct Cpu {
     prefixed: bool,
     draw_line: bool,
     draw_image: bool,
+    pub loading_boot_image: bool,
 }
 
 impl Cpu {
@@ -20,6 +21,7 @@ impl Cpu {
             prefixed: false,
             draw_line: false,
             draw_image: false,
+            loading_boot_image: false,
         }
     }
 
@@ -73,6 +75,10 @@ impl Cpu {
         } else {
             false
         };
+
+        if self.registers.pc == 0x40 {
+            self.loading_boot_image = true;
+        }
 
         self.increase_uptime(instruction.cycles);
     }

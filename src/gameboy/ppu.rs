@@ -1,4 +1,5 @@
-use crate::gameboy::display::DIMENSIONS;
+use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X};
+use crate::gameboy::memory::ADDRESS_SPACE;
 
 #[derive(Debug)]
 pub struct Ppu {}
@@ -8,33 +9,36 @@ impl Ppu {
         Ppu {}
     }
 
-    pub fn draw_line(&mut self, mem: &mut [u8; 0x10000], pixel_buff: &mut [u8; DIMENSIONS]) {
+    pub fn draw_line(&mut self, mem: &mut [u8; ADDRESS_SPACE], pixel_buff: &mut [u8; DIMENSIONS]) {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
         // self.increment_lcd_y(mem);
     }
 
-    fn get_lcd_y(&self, mem: &[u8; 0x10000]) -> u8 {
+    fn get_lcd_y(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
         mem[0xff44]
     }
 
-    fn increment_lcd_y(&self, mem: &mut [u8; 0x10000]) {
+    fn increment_lcd_y(&self, mem: &mut [u8; ADDRESS_SPACE]) {
         mem[0xff44] += 1;
     }
 
-    fn get_lcd_control(&self, mem: &[u8; 0x10000]) -> u8 {
+    fn get_lcd_control(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
         mem[0xff40]
     }
 
-    fn get_oam_table(&self, mem: &[u8; 0x10000]) -> [u8; 0xa0] {
-        let mut oam: [u8; 0xa0] = [0; 0xa0];
-        for i in 0xfe00..0xfea0 {
-            oam[i - 0xfe00] = mem[i];
-        }
-        oam
+    fn get_oam_table(&self, mem: &[u8; ADDRESS_SPACE]) -> [u8; 0xa0] {
+        core::array::from_fn(|n| mem[0xfe00 + n])
     }
 
-    fn oam_scan(&self, mem: &[u8; 0x10000]) -> Vec<OAM> {
+    fn get_tile(&self, mem: &[u8; ADDRESS_SPACE], index: u8) -> Tile {
+        assert!(index < 40);
+        Tile::new(core::array::from_fn(|n| {
+            mem[0x8000 + index as usize * 16 + n]
+        }))
+    }
+
+    fn oam_scan(&self, mem: &[u8; ADDRESS_SPACE]) -> Vec<OAM> {
         let oam_table = self.get_oam_table(mem);
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
         let obj_size: u8 = if lcd_control.obj_size { 16 } else { 8 };
@@ -61,15 +65,49 @@ impl Ppu {
         active_oam
     }
 
+    fn get_scy(mem: &[u8; ADDRESS_SPACE]) -> u8 {
+        mem[0xff42]
+    }
+
+    fn get_scx(mem: &[u8; ADDRESS_SPACE]) -> u8 {
+        mem[0xff43]
+    }
+
     fn draw_pixels(
         &mut self,
-        mem: &[u8; 0x10000],
+        mem: &[u8; ADDRESS_SPACE],
         pixel_buff: &mut [u8; DIMENSIONS],
         sprites: Vec<OAM>,
     ) {
-        let mut line: [u8; 160] = [0; 160];
-        for sprite in sprites {
-            println!("drawing pixel");
+        let mut line: [u8; DIMENSIONS_X] = [0; DIMENSIONS_X];
+        let lcd_control = LcdControl::new(self.get_lcd_control(mem));
+        let mut oam_fifo = [0; 8];
+        let mut bg_fifo = [0; 8];
+
+        for i in 0..DIMENSIONS_X {
+            // oam fifo
+            if lcd_control.obj_enable {
+                let mut sprite_index = 0xff;
+                'inner: for (i, sprite) in sprites.iter().enumerate() {
+                    if i >= sprite.x_pos as usize && i < (sprite.x_pos as usize + 8) {
+                        sprite_index = i;
+                        break 'inner;
+                    }
+                }
+
+                if sprite_index < 10 {
+                    let oam_entry = sprites.get(sprite_index).unwrap();
+                    let y = self.get_lcd_y(mem) - oam_entry.y_pos;
+                    let tile = self.get_tile(mem, oam_entry.index);
+                    let sprite_pixels: [u8; 0x8] =
+                        core::array::from_fn(|m| tile.get_pixel(m as u8, y));
+                    if oam_entry.x_pos < 7 || oam_entry.x_pos > 160 {
+                        for i in 0..8 {}
+                    }
+                } else {
+                    oam_fifo[i % 8] = 0;
+                }
+            }
         }
     }
 
@@ -106,20 +144,25 @@ impl Tile {
         Tile(data)
     }
 
-    pub fn get_pixel(&self) -> [u8; 8 * 8] {
-        let mut pixels: [u8; 8 * 8] = [0; 8 * 8];
+    pub fn get_pixels(&self) -> [u8; 8 * 8] {
+        core::array::from_fn(|i| self.get_pixel(i as u8 % 8, i as u8 / 8))
+    }
 
-        for i in 0..8usize {
-            let lsbyte: u8 = self.0[i * 2];
-            let msbyte: u8 = self.0[i * 2 + 1];
-            for n in 0..8usize {
-                let lsbit: bool = if (lsbyte & (1 << n)) > 0 { true } else { false };
-                let msbit: bool = if (msbyte & (1 << n)) > 0 { true } else { false };
-                pixels[i * 8 + n] = if msbit { 2 } else { 0 } + if lsbit { 2 } else { 0 };
-            }
-        }
-
-        pixels
+    pub fn get_pixel(&self, x: u8, y: u8) -> u8 {
+        assert!(x < 8 && y < 8);
+        let lsbyte: u8 = self.0[y as usize * 2];
+        let msbyte: u8 = self.0[y as usize * 2 + 1];
+        let lsbit: bool = if (lsbyte & (1 << (7 - x))) > 0 {
+            true
+        } else {
+            false
+        };
+        let msbit: bool = if (msbyte & (1 << (7 - x))) > 0 {
+            true
+        } else {
+            false
+        };
+        return if msbit { 2 } else { 0 } + if lsbit { 1 } else { 0 };
     }
 }
 
@@ -132,14 +175,14 @@ impl TileMap {}
 
 #[derive(Debug)]
 struct LcdControl {
-    enable: bool,
-    tile_map_area: bool,
-    window_enable: bool,
-    bg_window_tile_area: bool,
-    bg_tile_map_area: bool,
-    obj_size: bool,
-    obj_enable: bool,
-    bg_window_enable: bool,
+    pub enable: bool,
+    pub tile_map_area: bool,
+    pub window_enable: bool,
+    pub bg_window_tile_area: bool,
+    pub bg_tile_map_area: bool,
+    pub obj_size: bool,
+    pub obj_enable: bool,
+    pub bg_window_enable: bool,
 }
 
 impl LcdControl {

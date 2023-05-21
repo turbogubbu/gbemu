@@ -1,11 +1,15 @@
 #[derive(Debug)]
 pub struct Memory {
-    pub data: [u8; 0x10000],
+    pub data: [u8; ADDRESS_SPACE],
 }
+
+pub const ADDRESS_SPACE: usize = 0x10000;
 
 impl Memory {
     pub fn new() -> Memory {
-        Memory { data: [0; 0x10000] }
+        Memory {
+            data: [0; ADDRESS_SPACE],
+        }
     }
 
     pub fn get_lcd_control(&self) -> u8 {
