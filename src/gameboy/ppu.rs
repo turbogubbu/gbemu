@@ -1,4 +1,4 @@
-use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X};
+use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
 use crate::gameboy::memory::ADDRESS_SPACE;
 
 #[derive(Debug)]
@@ -12,7 +12,7 @@ impl Ppu {
     pub fn draw_line(&mut self, mem: &mut [u8; ADDRESS_SPACE], pixel_buff: &mut [u8; DIMENSIONS]) {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
-        // self.increment_lcd_y(mem);
+        self.increment_lcd_y(mem);
     }
 
     fn get_lcd_y(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
@@ -32,7 +32,6 @@ impl Ppu {
     }
 
     fn get_tile(&self, mem: &[u8; ADDRESS_SPACE], index: u8) -> Tile {
-        assert!(index < 40);
         Tile::new(core::array::from_fn(|n| {
             mem[0x8000 + index as usize * 16 + n]
         }))
@@ -65,12 +64,23 @@ impl Ppu {
         active_oam
     }
 
-    fn get_scy(mem: &[u8; ADDRESS_SPACE]) -> u8 {
+    fn get_scy(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
         mem[0xff42]
     }
 
-    fn get_scx(mem: &[u8; ADDRESS_SPACE]) -> u8 {
+    fn get_scx(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
         mem[0xff43]
+    }
+
+    fn get_tile_map_index(&self, mem: &[u8; ADDRESS_SPACE], x: u8, y: u8) -> u8 {
+        assert!(x < 32 && y < 32);
+        let lcd_c = LcdControl::new(self.get_lcd_control(mem));
+
+        if lcd_c.tile_map_area {
+            mem[0x9c00 + x as usize + y as usize * 32]
+        } else {
+            mem[0x9800 + x as usize + y as usize * 32]
+        }
     }
 
     fn draw_pixels(
@@ -79,39 +89,57 @@ impl Ppu {
         pixel_buff: &mut [u8; DIMENSIONS],
         sprites: Vec<OAM>,
     ) {
-        let mut line: [u8; DIMENSIONS_X] = [0; DIMENSIONS_X];
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
-        let mut oam_fifo = [0; 8];
-        let mut bg_fifo = [0; 8];
+        let mut oam_fifo = [0; DIMENSIONS_X];
+        let mut bg_fifo = [0; DIMENSIONS_X];
 
-        for i in 0..DIMENSIONS_X {
-            // oam fifo
-            if lcd_control.obj_enable {
-                let mut sprite_index = 0xff;
-                'inner: for (i, sprite) in sprites.iter().enumerate() {
-                    if i >= sprite.x_pos as usize && i < (sprite.x_pos as usize + 8) {
-                        sprite_index = i;
-                        break 'inner;
+        if lcd_control.obj_enable {
+            for (i, sprite) in sprites.iter().enumerate() {
+                let pos = sprite.x_pos as i16 - 8;
+                let y = self.get_lcd_y(mem) - sprite.y_pos;
+                let tile = self.get_tile(mem, sprite.index);
+                let sprite_pixels: [u8; 0x8] = core::array::from_fn(|m| tile.get_pixel(m as u8, y));
+
+                for i in 0..8 {
+                    if (pos + i) < 0 {
+                        continue;
+                    } else {
+                        oam_fifo[(pos + i) as usize] = sprite_pixels[i as usize];
                     }
                 }
+            }
+        }
 
-                if sprite_index < 10 {
-                    let oam_entry = sprites.get(sprite_index).unwrap();
-                    let y = self.get_lcd_y(mem) - oam_entry.y_pos;
-                    let tile = self.get_tile(mem, oam_entry.index);
-                    let sprite_pixels: [u8; 0x8] =
-                        core::array::from_fn(|m| tile.get_pixel(m as u8, y));
-                    if oam_entry.x_pos < 7 || oam_entry.x_pos > 160 {
-                        for i in 0..8 {}
-                    }
-                } else {
-                    oam_fifo[i % 8] = 0;
-                }
+        let scx = self.get_scx(mem);
+        let scy = self.get_scy(mem);
+        let ly = self.get_lcd_y(mem);
+
+        for i in 0..160 {
+            // todo: no check of any registers, just trying to get the bootscreen running
+            // good reference for ppu processing: http://pixelbits.16-b.it/GBEDG/ppu/#a-word-of-warning
+            let x = ((scx / 8) + i) & 0x1f;
+            let y = ((ly as u16 + scy as u16) & 0xff) as u8 / 8;
+            let tile = self.get_tile(mem, self.get_tile_map_index(mem, x, y));
+            let y_tile = (scy.wrapping_sub(ly)) % 8;
+            let x_tile = i % 8;
+
+            bg_fifo[i as usize] = tile.get_pixel(x_tile, y_tile);
+        }
+
+        for i in 0..160 {
+            if oam_fifo[i as usize] == 0 {
+                pixel_buff[ly as usize * DIMENSIONS_X + i] = bg_fifo[i];
+            } else {
+                pixel_buff[ly as usize * DIMENSIONS_X + i] = oam_fifo[i];
             }
         }
     }
 
     fn horizontal_blank(&mut self) {}
+
+    pub fn get_lcd_ppu_enable(&self, mem: &[u8; ADDRESS_SPACE]) -> bool {
+        LcdControl::new(self.get_lcd_control(mem)).enable
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -168,7 +196,7 @@ impl Tile {
 
 #[derive(Debug)]
 struct TileMap {
-    tile_indexes: Vec<u8>,
+    tile_indexes: [u8; 32 * 32],
 }
 
 impl TileMap {}

@@ -97,7 +97,6 @@ impl Display {
 
     fn draw_lcd_pixel(&mut self, x: i32, y: i32, color: u8) {
         assert!(color < 4, "Color val needs to be smaller than 4");
-        println!("color val: {}", color);
         self.sdl_canvas.set_draw_color(Color::RGB(
             63 + color * 64,
             63 + color * 64,
@@ -125,6 +124,13 @@ impl Display {
     }
 
     pub fn update_frame(&mut self) {
+        for i in 0..DIMENSIONS {
+            self.draw_lcd_pixel(
+                ((i % DIMENSIONS_X) * 2) as i32,
+                ((i / DIMENSIONS_X) * 2) as i32,
+                self.pixel_buffer[i],
+            );
+        }
         self.sdl_canvas.present();
     }
 }
