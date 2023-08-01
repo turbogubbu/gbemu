@@ -1,4 +1,4 @@
-use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
+use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y, Display};
 use crate::gameboy::memory::ADDRESS_SPACE;
 
 #[derive(Debug)]
@@ -9,18 +9,21 @@ impl Ppu {
         Ppu {}
     }
 
-    pub fn draw_line(&mut self, mem: &mut [u8; ADDRESS_SPACE], pixel_buff: &mut [u8; DIMENSIONS]) {
+    pub fn draw_line(&mut self, mem: &mut [u8; ADDRESS_SPACE], pixel_buff: &mut [u8; DIMENSIONS]) -> bool {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
-        self.increment_lcd_y(mem);
+        self.increment_lcd_y(mem)
     }
 
-    fn get_lcd_y(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
+    pub fn get_lcd_y(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
         mem[0xff44]
     }
 
-    fn increment_lcd_y(&self, mem: &mut [u8; ADDRESS_SPACE]) {
+    fn increment_lcd_y(&self, mem: &mut [u8; ADDRESS_SPACE]) -> bool {
         mem[0xff44] += 1;
+        mem[0xff44] %= 154;
+
+        if mem[0xff44] == 0 { true } else { false }
     }
 
     fn get_lcd_control(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
@@ -72,6 +75,12 @@ impl Ppu {
         mem[0xff43]
     }
 
+    /// \brief Get the index of a tile from the VRAM Tile Map
+    /// \ref https://gbdev.io/pandocs/Tile_Maps.html
+    /// \param mem Address Space
+    /// \param x, x pos on the tile map
+    /// \param y, y pos on the thile map
+    /// \retval index of the tile
     fn get_tile_map_index(&self, mem: &[u8; ADDRESS_SPACE], x: u8, y: u8) -> u8 {
         assert!(x < 32 && y < 32);
         let lcd_c = LcdControl::new(self.get_lcd_control(mem));
@@ -93,6 +102,16 @@ impl Ppu {
         let mut oam_fifo = [0; DIMENSIONS_X];
         let mut bg_fifo = [0; DIMENSIONS_X];
 
+        let scx = self.get_scx(mem);
+        let scy = self.get_scy(mem);
+        let ly = self.get_lcd_y(mem);
+
+        // println!("Drawing line at y: {}, scx: {}, scy: {}", ly, scx, scy);
+
+        if ly as usize >= DIMENSIONS_Y {
+            return;
+        }
+
         if lcd_control.obj_enable {
             for (i, sprite) in sprites.iter().enumerate() {
                 let pos = sprite.x_pos as i16 - 8;
@@ -110,18 +129,32 @@ impl Ppu {
             }
         }
 
-        let scx = self.get_scx(mem);
-        let scy = self.get_scy(mem);
-        let ly = self.get_lcd_y(mem);
 
         for i in 0..160 {
             // todo: no check of any registers, just trying to get the bootscreen running
             // good reference for ppu processing: http://pixelbits.16-b.it/GBEDG/ppu/#a-word-of-warning
-            let x = ((scx / 8) + i) & 0x1f;
-            let y = ((ly as u16 + scy as u16) & 0xff) as u8 / 8;
-            let tile = self.get_tile(mem, self.get_tile_map_index(mem, x, y));
-            let y_tile = (scy.wrapping_sub(ly)) % 8;
-            let x_tile = i % 8;
+            let index_x = ((scx + i)/ 8) & 0x1f;
+            let index_y = ((ly as u16 + scy as u16) & 0xff) as u8 / 8;
+            let map_index = self.get_tile_map_index(mem, index_x, index_y);
+            let tile = self.get_tile(mem, map_index);
+            let y_tile = scy.wrapping_add(ly) % 8;
+            let x_tile = scx.wrapping_add(i) % 8;
+
+            // if map_index != 0 {
+            //     println!("Drawing pixel ({},{}) from Tile {} ({},{}), scx, scy: {},{}", i, ly, map_index, x_tile, y_tile, scx, scy);
+            // }
+
+            // Problem in 0x95 subroutine to double up bits, i think this is the correct way
+            // CE ED -> F0 00 F0 00  FC 00 FC 00 FC 00 FC 00 F3 00 F3 00
+
+            // CE = 11001110 = reg a = reg c
+            // reg_c = 10011100 (assuming carry was 0) -> carry is 1
+            // reg_a = 10011101 -> carry is 1
+            // reg_c = 11001110 (bc of pop)
+            // reg_c = 10011101
+            // reg_a = 00111011 -> carry is 1
+
+
 
             bg_fifo[i as usize] = tile.get_pixel(x_tile, y_tile);
         }
@@ -133,6 +166,8 @@ impl Ppu {
                 pixel_buff[ly as usize * DIMENSIONS_X + i] = oam_fifo[i];
             }
         }
+
+        // println!("Scx: {}, Scy: {}", self.get_scx(mem), self.get_scy(mem));
     }
 
     fn horizontal_blank(&mut self) {}

@@ -106,20 +106,36 @@ impl Display {
         self.sdl_canvas.draw_rect(rect).unwrap();
     }
 
+    pub fn draw_single_tile(&mut self, mem: &[u8; 0x10000], index: u8, pos_x: i32, pos_y: i32) {
+        let pixels = Tile::new(core::array::from_fn(|n| mem[0x8000 + index as usize * 16 + n])).get_pixels();
+
+        for n in 0..64 {
+            let x = pos_x + (n as i32 % 8) * PIXEL as i32;
+            let y = pos_y + (n as i32 / 8) * PIXEL as i32;
+            self.draw_lcd_pixel(x, y, pixels[n]);
+        }
+    }
+
     pub fn draw_vram_tiles(&mut self, mem: &[u8; 0x10000]) {
         for i in 0..256 {
-            let pixels = Tile::new(core::array::from_fn(|n| mem[0x8000 + i * 16 + n])).get_pixels();
-
-            // Tile diplsay start address
             let base_x = WIDTH as i32 - 8 * 8 * PIXEL as i32 + (i as i32 % 8) * 8 * PIXEL as i32;
             let base_y = (i as i32 / 8) * 8 * PIXEL as i32;
 
-            for n in 0..64 {
-                let x = base_x + (n as i32 % 8) * PIXEL as i32;
-                let y = base_y + (n as i32 / 8) * PIXEL as i32;
-                self.draw_lcd_pixel(x, y, pixels[n]);
-            }
+            self.draw_single_tile(mem, i as u8, base_x, base_y);
         }
+
+        // CE ED -> F0 00 F0 00  FC 00 FC 00 FC 00 FC 00 F3 00 F3 00
+
+        /*let pixels = Tile::new([0x3C, 0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E, 0x5E, 0x7E, 0x0A, 0x7C, 0x56, 0x38, 0x7C]).get_pixels();
+
+        let pos_x = 600;
+        let pos_y = 450;
+
+        for n in 0..64 {
+            let x = pos_x + (n as i32 % 8) * PIXEL as i32;
+            let y = pos_y + (n as i32 / 8) * PIXEL as i32;
+            self.draw_lcd_pixel(x, y, pixels[n]);
+        }*/
         self.sdl_canvas.present();
     }
 

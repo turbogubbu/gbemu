@@ -1,4 +1,7 @@
 use crate::gameboy::instructions;
+use crate::gameboy::instructions::Addressing::Register;
+use crate::gameboy::instructions::INSTRUCTIONS;
+use crate::gameboy::memory::ADDRESS_SPACE;
 use crate::gameboy::registers::{Flag, Registers};
 
 use super::instructions::Instruction;
@@ -7,6 +10,7 @@ use super::instructions::Instruction;
 pub struct Cpu {
     registers: Registers,
     uptime: u64,
+    ime: bool,
     prefixed: bool,
     draw_line: bool,
     draw_image: bool,
@@ -18,6 +22,7 @@ impl Cpu {
         Cpu {
             registers: Registers::new(),
             uptime: 0,
+            ime: false,
             prefixed: false,
             draw_line: false,
             draw_image: false,
@@ -31,10 +36,6 @@ impl Cpu {
 
     pub fn draw_line(&self) -> bool {
         self.draw_line
-    }
-
-    pub fn draw_image(&self) -> bool {
-        self.draw_image
     }
 
     pub fn print_status(&self) {
@@ -125,7 +126,17 @@ impl Cpu {
             instructions::OpType::RL => self.rl(instruction),
             instructions::OpType::RLA => self.rla(instruction),
             instructions::OpType::Cp => self.cp(instruction, mem),
-            _ => panic!(),
+            instructions::OpType::Sub8 => self.sub8(instruction, mem),
+            instructions::OpType::Add8 => self.add8(instruction, mem),
+            instructions::OpType::Nop => { return; },
+            instructions::OpType::Jump => self.jump(instruction, mem),
+            instructions::OpType::DI => self.di(instruction),
+            instructions::OpType::Or => self.or(instruction, mem),
+            instructions::OpType::EI => self.ei(instruction),
+            instructions::OpType::CPL => self.cpl(instruction),
+            instructions::OpType::And => self.and(instruction, mem),
+            instructions::OpType::Swap => self.swap(instruction, mem),
+            _ => panic!("Instruction not implemented: {:02x}", instruction.opcode),
         }
     }
 
@@ -181,7 +192,7 @@ impl Cpu {
         }
     }
 
-    fn get_value8(&self, addressing: &instructions::Addressing, mem: &[u8; 0x10000]) -> u8 {
+    fn get_value8(&mut self, addressing: &instructions::Addressing, mem: &[u8; 0x10000]) -> u8 {
         match addressing {
             instructions::Addressing::Immediate8 => self.read_mem(mem, self.registers.pc + 1),
             instructions::Addressing::Register(reg) => match reg {
@@ -201,8 +212,13 @@ impl Cpu {
                 instructions::Registers::BC => self.read_mem(mem, self.registers.get_bc()),
                 instructions::Registers::DE => self.read_mem(mem, self.registers.get_de()),
                 instructions::Registers::HL => self.read_mem(mem, self.registers.get_hl()),
+                instructions::Registers::HlPlus => {
+                    let retval = self.read_mem(mem, self.registers.get_hl());
+                    self.inc16(&instructions::INSTRUCTIONS[0x23]);
+                    retval
+                },
                 _ => {
-                    panic!();
+                    panic!("get_Value8 for this relative register not implemented");
                 }
             },
             instructions::Addressing::RelativeAddress8 => {
@@ -267,10 +283,10 @@ impl Cpu {
     }
 
     fn load8(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
+        let val = self.get_value8(&instruction.src, mem);
         self.store_value8(
             &instruction.dst,
-            mem,
-            self.get_value8(&instruction.src, mem),
+            mem, val
         );
     }
 
@@ -534,7 +550,10 @@ impl Cpu {
                     .rl_reg(reg, self.registers.get_flag(Flag::Carry))
                 {
                     self.registers.set_flag(Flag::Carry)
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
                 }
+
                 if *self.registers.get_reg_ref(*reg) == 0 {
                     self.registers.set_flag(Flag::Zero);
                 } else {
@@ -546,10 +565,8 @@ impl Cpu {
     }
 
     fn rla(&mut self, instruction: &Instruction) {
-        if instruction.opcode != 0x17 {
-            panic!("rla instruction has to be opcode 0x17");
-        }
-        self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x11 as usize])
+        assert_eq!(instruction.opcode, 0x17, "rla instruction has to be opcode 0x17");
+        self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x17 as usize]);
     }
 
     fn cp(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
@@ -585,5 +602,107 @@ impl Cpu {
         } else {
             self.registers.reset_flag(Flag::Zero);
         }
+    }
+
+    fn sub8(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+        let val = self.get_value8(&instruction.dst, mem);
+
+        if val > self.registers.a {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        // TODO: Check if this is the right operation for half carry
+        if (((val & 0xf) + (self.registers.a & 0xf)) & 0x10) == 0x10 {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
+        }
+
+        let res = self.registers.a.wrapping_sub(val);
+
+        if res == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.registers.a = res;
+    }
+
+    fn add8(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+        let dst = self.get_value8(&instruction.dst, mem);
+        let src = self.get_value8(&instruction.src, mem);
+
+        if dst > (255 - src) {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        if (((src & 0xf) + (dst & 0xf)) & 0x10) == 0x10 {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
+        }
+
+        let result = dst.wrapping_add(src);
+
+        if result == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, result);
+    }
+
+    fn jump(&mut self, instructions: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+        assert_eq!(instructions.opcode, 0xc3, "Wrong opcode for jump instruction!");
+        self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16;
+    }
+
+    fn di(&mut self, instruction: &Instruction) {
+        assert_eq!(instruction.opcode, 0xf3, "Wrong opcode for DI");
+        self.ime = false;
+    }
+
+    fn or(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+        self.registers.a |= self.get_value8(&instruction.dst, mem);
+
+        if self.registers.a == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+    }
+
+    fn ei(&mut self, instruction: &Instruction) {
+        assert_eq!(instruction.opcode, 0xfb, "Wrong opcode for EI");
+        self.ime = true;
+    }
+
+    fn cpl(&mut self, instruction: &Instruction) {
+        assert_eq!(instruction.opcode, 0x2f, "Wrong opcode for CPL");
+        self.registers.a ^= 0xff;
+    }
+
+    fn and(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+        let val = self.get_value8(&instruction.dst, mem);
+
+        self.registers.a &= val;
+
+        if self.registers.a == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+    }
+
+    fn swap(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+        let mut val = self.get_value8(&instruction.dst, mem);
+        val = ((val & 0x0f) << 4) | ((val & 0xf0) >> 4);
+        self.store_value8(&instruction.dst, mem, val);
     }
 }

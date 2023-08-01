@@ -40,13 +40,12 @@ impl Gameboy {
             }
 
             if self.cpu.draw_line() && self.ppu.get_lcd_ppu_enable(&self.memory.data) {
-                self.ppu
-                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer);
-            }
-
-            if self.cpu.draw_image() {
-                self.display.update_frame();
-                println!("Drawing frame!");
+                if self.ppu
+                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer) {
+                    self.display.update_frame();
+                    self.display.draw_vram_tiles(&self.memory.data);
+                    // println!("Drawing frame!");
+                }
             }
         }
     }
