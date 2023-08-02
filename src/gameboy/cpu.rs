@@ -15,6 +15,7 @@ pub struct Cpu {
     draw_line: bool,
     draw_image: bool,
     pub loading_boot_image: bool,
+    pub load_rom_boot_section: bool,
 }
 
 impl Cpu {
@@ -27,6 +28,7 @@ impl Cpu {
             draw_line: false,
             draw_image: false,
             loading_boot_image: false,
+            load_rom_boot_section: false,
         }
     }
 
@@ -81,11 +83,15 @@ impl Cpu {
             self.loading_boot_image = true;
         }
 
+        if self.registers.pc == 0x100 {
+            self.load_rom_boot_section = true;
+        }
+
         self.increase_uptime(instruction.cycles);
     }
 
     pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut [u8; 0x10000]) {
-        for i in 0..boot_rom.len() {
+        for i in 0..0x100 {
             self.write_mem(mem, i as u16, boot_rom[i]);
         }
     }
@@ -128,7 +134,9 @@ impl Cpu {
             instructions::OpType::Cp => self.cp(instruction, mem),
             instructions::OpType::Sub8 => self.sub8(instruction, mem),
             instructions::OpType::Add8 => self.add8(instruction, mem),
-            instructions::OpType::Nop => { return; },
+            instructions::OpType::Nop => {
+                return;
+            }
             instructions::OpType::Jump => self.jump(instruction, mem),
             instructions::OpType::DI => self.di(instruction),
             instructions::OpType::Or => self.or(instruction, mem),
@@ -136,6 +144,8 @@ impl Cpu {
             instructions::OpType::CPL => self.cpl(instruction),
             instructions::OpType::And => self.and(instruction, mem),
             instructions::OpType::Swap => self.swap(instruction, mem),
+            instructions::OpType::RST => self.rst(instruction, mem),
+            instructions::OpType::Add16 => self.add16(instruction, mem),
             _ => panic!("Instruction not implemented: {:02x}", instruction.opcode),
         }
     }
@@ -181,6 +191,19 @@ impl Cpu {
     fn get_value16(&self, addressing: &instructions::Addressing, mem: &[u8; 0x10000]) -> u16 {
         match addressing {
             instructions::Addressing::Immediate16 => self.get_value16_immediate(mem),
+            instructions::Addressing::Register(reg) => match reg {
+                instructions::Registers::BC => {
+                    ((self.registers.b as u16) << 8) | self.registers.c as u16
+                }
+                instructions::Registers::DE => {
+                    ((self.registers.d as u16) << 8) | self.registers.e as u16
+                }
+                instructions::Registers::HL => {
+                    ((self.registers.h as u16) << 8) | self.registers.l as u16
+                }
+                instructions::Registers::SP => self.registers.sp,
+                _ => panic!("Must be double reg!"),
+            },
             _ => panic!("Addressing mode for getValue16 not implemented yet"),
         }
     }
@@ -216,7 +239,7 @@ impl Cpu {
                     let retval = self.read_mem(mem, self.registers.get_hl());
                     self.inc16(&instructions::INSTRUCTIONS[0x23]);
                     retval
-                },
+                }
                 _ => {
                     panic!("get_Value8 for this relative register not implemented");
                 }
@@ -284,10 +307,7 @@ impl Cpu {
 
     fn load8(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
         let val = self.get_value8(&instruction.src, mem);
-        self.store_value8(
-            &instruction.dst,
-            mem, val
-        );
+        self.store_value8(&instruction.dst, mem, val);
     }
 
     fn dec16(&mut self, instruction: &Instruction) {
@@ -565,7 +585,10 @@ impl Cpu {
     }
 
     fn rla(&mut self, instruction: &Instruction) {
-        assert_eq!(instruction.opcode, 0x17, "rla instruction has to be opcode 0x17");
+        assert_eq!(
+            instruction.opcode, 0x17,
+            "rla instruction has to be opcode 0x17"
+        );
         self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x17 as usize]);
     }
 
@@ -659,8 +682,24 @@ impl Cpu {
     }
 
     fn jump(&mut self, instructions: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
-        assert_eq!(instructions.opcode, 0xc3, "Wrong opcode for jump instruction!");
-        self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16;
+        /*assert_eq!(
+            instructions.opcode, 0xc3,
+            "Wrong opcode for jump instruction!"
+        );*/
+
+        match instructions.dst {
+            instructions::Addressing::Address16 => {
+                self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16;
+            }
+            instructions::Addressing::RelativeRegister(reg) => match reg {
+                instructions::Registers::HL => {
+                    self.registers.pc = ((self.registers.h as u16) << 8 | self.registers.l as u16)
+                        - instructions.bytes as u16;
+                }
+                _ => panic!("Not implemented for jump"),
+            },
+            _ => panic!("Not implemented for jump"),
+        }
     }
 
     fn di(&mut self, instruction: &Instruction) {
@@ -704,5 +743,42 @@ impl Cpu {
         let mut val = self.get_value8(&instruction.dst, mem);
         val = ((val & 0x0f) << 4) | ((val & 0xf0) >> 4);
         self.store_value8(&instruction.dst, mem, val);
+    }
+
+    fn rst(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+        let mut target: u16 = 0x00;
+        match &instruction.dst {
+            instructions::Addressing::RstAddr(rstaddr) => target = *rstaddr,
+            _ => panic!("addressing mode not implemented for rst instruction"),
+        }
+
+        self.registers.sp -= 2;
+        self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
+        self.write_mem(mem, self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+        // -1 for instruction size
+        self.registers.pc = target - 1;
+
+        self.print_status();
+    }
+
+    fn add16(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+        let src = self.get_value16(&instruction.src, mem);
+        let mut dst = self.get_value16(&instruction.dst, mem);
+
+        if (dst as u32 + src as u32) > u16::MAX as u32 {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        if (((src & 0xf) + (dst & 0xf)) & 0x10) == 0x10 {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
+        }
+
+        dst = src.wrapping_add(dst);
+
+        self.store_value16(&instruction.dst, dst);
     }
 }

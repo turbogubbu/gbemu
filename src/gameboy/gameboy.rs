@@ -39,9 +39,21 @@ impl Gameboy {
                 self.cpu.loading_boot_image = false;
             }
 
+            if self.cpu.load_rom_boot_section {
+                println!("boot section before loading new file");
+                self.memory.print(0x0000, 0x100);
+                self.cpu
+                    .load_boot_rom(fs::read("roms/tetris.gb").unwrap(), &mut self.memory.data);
+                println!("boot section after loading new file");
+                self.memory.print(0x0000, 0x100);
+                self.cpu.load_rom_boot_section = false;
+            }
+
             if self.cpu.draw_line() && self.ppu.get_lcd_ppu_enable(&self.memory.data) {
-                if self.ppu
-                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer) {
+                if self
+                    .ppu
+                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer)
+                {
                     self.display.update_frame();
                     self.display.draw_vram_tiles(&self.memory.data);
                     // println!("Drawing frame!");
