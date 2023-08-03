@@ -4,12 +4,14 @@ use crate::gameboy::cpu::Cpu;
 use crate::gameboy::display::Display;
 use crate::gameboy::memory::Memory;
 use crate::gameboy::ppu::Ppu;
+use crate::util::video::Video;
 
 pub struct Gameboy {
     cpu: Cpu,
     memory: Memory,
     ppu: Ppu,
     display: Display,
+    video: Video,
 }
 
 impl Gameboy {
@@ -19,6 +21,7 @@ impl Gameboy {
             memory: Memory::new(),
             ppu: Ppu::new(),
             display: Display::new(),
+            video: Video::new(),
         }
     }
 
@@ -35,7 +38,8 @@ impl Gameboy {
             self.cpu.execute_single_instruction(&mut self.memory.data);
 
             if self.cpu.loading_boot_image {
-                self.display.draw_vram_tiles(&self.memory.data);
+                //self.display.draw_vram_tiles(&self.memory.data);
+                self.video.draw_vram_tiles(&self.memory.data);
                 self.cpu.loading_boot_image = false;
             }
 
@@ -54,9 +58,10 @@ impl Gameboy {
                     .ppu
                     .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer)
                 {
-                    self.display.update_frame();
-                    self.display.draw_vram_tiles(&self.memory.data);
-                    // println!("Drawing frame!");
+                    self.video.update_gameboy_frame(&self.display.pixel_buffer);
+                    self.video.draw_vram_tiles(&self.memory.data);
+
+                    self.video.write_smth();
                 }
             }
         }
