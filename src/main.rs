@@ -1,6 +1,7 @@
 //use crate::cpu::cpu::Cpu;
 //use crate::display::display::Display;
 mod gameboy;
+mod util;
 
 use gameboy::gameboy::Gameboy;
 //mod cpu;

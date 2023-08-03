@@ -32,6 +32,23 @@ impl Memory {
         }
     }
 
+    pub fn get_input_reg(&self) -> u8 {
+        self.data[0xff00]
+    }
+
+    pub fn get_serial_transfer(&self) -> [u8; 2] {
+        [self.data[0xff01], self.data[0xff02]]
+    }
+
+    pub fn get_timer_and_divider(&self) -> [u8; 4] {
+        [
+            self.data[0xff04],
+            self.data[0xff05],
+            self.data[0xff06],
+            self.data[0xff07],
+        ]
+    }
+
     pub fn print(&self, start_address: u16, len: u16) {
         println!("        00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
 
