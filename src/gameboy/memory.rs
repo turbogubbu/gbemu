@@ -4,6 +4,7 @@ pub struct Memory {
 }
 
 pub const ADDRESS_SPACE: usize = 0x10000;
+pub const JOYPAD_INPUT_ADDRESS: usize = 0xff00;
 
 impl Memory {
     pub fn new() -> Memory {
@@ -12,10 +13,12 @@ impl Memory {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_lcd_control(&self) -> u8 {
         self.data[0xff40]
     }
 
+    #[allow(dead_code)]
     pub fn get_oam_entry(&self, index: u8) -> [u8; 4] {
         assert!(index < 40, "OAM index has to be lower than 40!");
         [
@@ -30,16 +33,22 @@ impl Memory {
         for i in 0..rom.len() {
             self.data[i] = rom[i];
         }
+
+        // This sets all buttons to not pressed!
+        self.data[JOYPAD_INPUT_ADDRESS] = 0x0f;
     }
 
+    #[allow(dead_code)]
     pub fn get_input_reg(&self) -> u8 {
-        self.data[0xff00]
+        self.data[JOYPAD_INPUT_ADDRESS]
     }
 
+    #[allow(dead_code)]
     pub fn get_serial_transfer(&self) -> [u8; 2] {
         [self.data[0xff01], self.data[0xff02]]
     }
 
+    #[allow(dead_code)]
     pub fn get_timer_and_divider(&self) -> [u8; 4] {
         [
             self.data[0xff04],

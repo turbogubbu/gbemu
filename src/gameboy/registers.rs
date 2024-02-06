@@ -282,4 +282,18 @@ impl Registers {
             false
         }
     }
+
+    pub fn reset_bit(&mut self, reg: &instructions::Registers, bit: &u8) {
+        match reg {
+            instructions::Registers::A => self.a &= !(1 << bit),
+            instructions::Registers::B => self.b &= !(1 << bit),
+            instructions::Registers::C => self.c &= !(1 << bit),
+            instructions::Registers::D => self.d &= !(1 << bit),
+            instructions::Registers::H => self.h &= !(1 << bit),
+            instructions::Registers::L => self.l &= !(1 << bit),
+            _ => {
+                panic!("Register not implemented to reset bit!");
+            }
+        };
+    }
 }
