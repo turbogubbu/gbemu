@@ -1,8 +1,8 @@
 use crate::gameboy::instructions;
-use crate::gameboy::instructions::Addressing::Register;
-use crate::gameboy::instructions::INSTRUCTIONS;
 use crate::gameboy::memory::ADDRESS_SPACE;
 use crate::gameboy::registers::{Flag, Registers};
+
+use log::{debug, info};
 
 use super::instructions::Instruction;
 
@@ -59,7 +59,8 @@ impl Cpu {
         assert_eq!(
             instruction.opcode,
             opcode,
-            "Opcode of instruction does not match array index! {}, instruction.opcode: 0x{:02x}, opcode: 0x{:02x}",
+            "Opcode of instruction (@pc: 0x{:04x}) does not match array index! {}, instruction.opcode: 0x{:02x}, opcode: 0x{:02x}",
+            self.registers.pc,
             instruction.name,
             instruction.opcode, opcode
         );
@@ -110,7 +111,7 @@ impl Cpu {
     }
 
     fn execute_instruction(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
-        println!(
+        debug!(
             "Executing instruction {} (pc: {:04x}, opcode. {:02x})",
             instruction.name, self.registers.pc, instruction.opcode
         );
@@ -146,7 +147,21 @@ impl Cpu {
             instructions::OpType::Swap => self.swap(instruction, mem),
             instructions::OpType::RST => self.rst(instruction, mem),
             instructions::OpType::Add16 => self.add16(instruction, mem),
-            _ => panic!("Instruction not implemented: {:02x}", instruction.opcode),
+            instructions::OpType::Stop => {
+                info!(
+                    "Received STOP instruction at PC: 0x{:04x}, exiting program",
+                    self.registers.pc
+                );
+                panic!(
+                    "Received STOP instruction at PC: 0x{:04x}, exiting program",
+                    self.registers.pc
+                );
+            }
+            instructions::OpType::Res => self.res(instruction),
+            _ => panic!(
+                "Instruction not implemented: {} 0x{:02x}",
+                instruction.name, instruction.opcode
+            ),
         }
     }
 
@@ -248,8 +263,11 @@ impl Cpu {
                 let pc_val: u16 = self.read_mem(mem, self.registers.pc + 1u16) as u16;
                 self.read_mem(mem, 0xff00 + pc_val)
             }
+            instructions::Addressing::RelativeAddress16 => {
+                self.read_mem(mem, self.get_value16_immediate(mem))
+            }
             _ => {
-                panic!("Addressing mod for getValue16 not implemented yet")
+                panic!("Addressing mod for getValue8 not implemented yet")
             }
         }
     }
@@ -272,6 +290,9 @@ impl Cpu {
                 }
                 instructions::Registers::HL => {
                     self.write_mem(mem, self.registers.get_hl(), value);
+                }
+                instructions::Registers::DE => {
+                    self.write_mem(mem, self.registers.get_de(), value);
                 }
                 instructions::Registers::C => {
                     self.write_mem(mem, self.registers.c as u16 + 0xff00, value);
@@ -464,12 +485,12 @@ impl Cpu {
         self.registers.sp -= 2;
         self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
         self.write_mem(mem, self.registers.sp + 1, (self.registers.pc >> 8) as u8);
-        // -3 because this gets added when pc is defaultly increased
+        // -3 because this gets added when pc is defaultly increased (instruction.bytes)
         self.registers.pc = self.get_value16_immediate(mem) - 3;
     }
 
     fn call(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
-        let mut make_call: bool = false;
+        let make_call: bool;
         match instruction.src {
             instructions::Addressing::Address16 => match instruction.dst {
                 instructions::Addressing::None => {
@@ -746,19 +767,33 @@ impl Cpu {
     }
 
     fn rst(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
-        let mut target: u16 = 0x00;
+        let /*mut*/ target: u16/* = 0x00*/;
         match &instruction.dst {
             instructions::Addressing::RstAddr(rstaddr) => target = *rstaddr,
             _ => panic!("addressing mode not implemented for rst instruction"),
         }
 
         self.registers.sp -= 2;
-        self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
-        self.write_mem(mem, self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+        self.write_mem(
+            mem,
+            self.registers.sp,
+            ((self.registers.pc + instruction.bytes as u16) & 0xff) as u8,
+        );
+        self.write_mem(
+            mem,
+            self.registers.sp + 1,
+            ((self.registers.pc + instruction.bytes as u16) >> 8) as u8,
+        );
         // -1 for instruction size
-        self.registers.pc = target - 1;
+        self.registers.pc = target - instruction.bytes as u16;
 
         self.print_status();
+
+        // self.registers.sp -= 2;
+        // self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
+        // self.write_mem(mem, self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+        // -3 because this gets added when pc is defaultly increased
+        // self.registers.pc = self.get_value16_immediate(mem) - 3;
     }
 
     fn add16(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
@@ -780,5 +815,17 @@ impl Cpu {
         dst = src.wrapping_add(dst);
 
         self.store_value16(&instruction.dst, dst);
+
+        debug! {"Add 16 with source: {:?} (val: 0x{:02x}) and destination {:?}(val: 0x{:02x})", instruction.src, src, instruction.dst, self.get_value16(&instruction.dst, mem)}
+    }
+
+    fn res(&mut self, instruction: &Instruction) {
+        match &instruction.src {
+            instructions::Addressing::Register(reg) => match &instruction.dst {
+                instructions::Addressing::Bit(bit) => self.registers.reset_bit(reg, bit),
+                _ => panic!("Destination of bit() function must be a bit!"),
+            },
+            _ => panic!("Must be register"),
+        }
     }
 }
