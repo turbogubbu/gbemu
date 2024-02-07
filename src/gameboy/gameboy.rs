@@ -1,5 +1,7 @@
 use std::fs;
 
+use std::time::{Duration, Instant};
+
 use crate::gameboy::cpu::Cpu;
 use crate::gameboy::display::Display;
 use crate::gameboy::memory::Memory;
@@ -34,6 +36,11 @@ impl Gameboy {
     }
 
     pub fn run(&mut self) {
+        let event_interval = Duration::from_millis(10);
+        let vram_interval = Duration::from_millis(1000);
+        let mut last_event_check = Instant::now();
+        let mut last_vram_update = Instant::now();
+
         loop {
             self.cpu.execute_single_instruction(&mut self.memory.data);
 
@@ -59,10 +66,20 @@ impl Gameboy {
                     .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer)
                 {
                     self.video.update_gameboy_frame(&self.display.pixel_buffer);
-                    self.video.draw_vram_tiles(&self.memory.data);
+                    // self.video.draw_vram_tiles(&self.memory.data);
 
                     self.video.write_smth();
                 }
+            }
+
+            if last_event_check.elapsed() >= event_interval {
+                self.video.check_events();
+                last_event_check = Instant::now();
+            }
+
+            if last_vram_update.elapsed() >= vram_interval {
+                self.video.draw_vram_tiles(&self.memory.data);
+                last_vram_update = Instant::now();
             }
         }
     }

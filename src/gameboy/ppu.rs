@@ -1,4 +1,4 @@
-use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y, Display};
+use crate::gameboy::display::{Display, DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
 use crate::gameboy::memory::ADDRESS_SPACE;
 
 #[derive(Debug)]
@@ -9,7 +9,11 @@ impl Ppu {
         Ppu {}
     }
 
-    pub fn draw_line(&mut self, mem: &mut [u8; ADDRESS_SPACE], pixel_buff: &mut [u8; DIMENSIONS]) -> bool {
+    pub fn draw_line(
+        &mut self,
+        mem: &mut [u8; ADDRESS_SPACE],
+        pixel_buff: &mut [u8; DIMENSIONS],
+    ) -> bool {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
         self.increment_lcd_y(mem)
@@ -23,7 +27,11 @@ impl Ppu {
         mem[0xff44] += 1;
         mem[0xff44] %= 154;
 
-        if mem[0xff44] == 0 { true } else { false }
+        if mem[0xff44] == 0 {
+            true
+        } else {
+            false
+        }
     }
 
     fn get_lcd_control(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
@@ -129,11 +137,10 @@ impl Ppu {
             }
         }
 
-
         for i in 0..160 {
             // todo: no check of any registers, just trying to get the bootscreen running
             // good reference for ppu processing: http://pixelbits.16-b.it/GBEDG/ppu/#a-word-of-warning
-            let index_x = ((scx + i)/ 8) & 0x1f;
+            let index_x = ((scx + i) / 8) & 0x1f;
             let index_y = ((ly as u16 + scy as u16) & 0xff) as u8 / 8;
             let map_index = self.get_tile_map_index(mem, index_x, index_y);
             let tile = self.get_tile(mem, map_index);
@@ -153,8 +160,6 @@ impl Ppu {
             // reg_c = 11001110 (bc of pop)
             // reg_c = 10011101
             // reg_a = 00111011 -> carry is 1
-
-
 
             bg_fifo[i as usize] = tile.get_pixel(x_tile, y_tile);
         }
@@ -180,6 +185,7 @@ impl Ppu {
 #[derive(Copy, Clone, Debug)]
 struct Pixel(u8);
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct OAM {
     y_pos: u8,

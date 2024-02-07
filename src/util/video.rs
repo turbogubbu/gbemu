@@ -3,14 +3,19 @@ extern crate sdl2;
 use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
 use crate::gameboy::ppu::Tile;
 
-use sdl2::pixels::Color;
-use sdl2::rect::{Point, Rect};
-use sdl2::render::{Texture, TextureCreator, WindowCanvas};
-use sdl2::ttf::Font;
-use sdl2::ttf::Sdl2TtfContext;
+use std::process::exit;
 
-use sdl2::video::WindowContext;
-use std::path::Path;
+use log::debug;
+
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::EventPump;
+
+use sdl2::pixels::Color;
+
+use sdl2::rect::{Point, Rect};
+use sdl2::render::WindowCanvas;
+use sdl2::ttf::Sdl2TtfContext;
 
 // LCD pixel to real pixel ratio
 const PIXEL: u32 = 2;
@@ -20,14 +25,15 @@ const HEIGHT: u32 = 1000;
 
 pub struct Video {
     canvas: WindowCanvas,
+    event_pump: EventPump,
     ttf_context: Sdl2TtfContext,
 }
 
 impl Video {
     pub fn new() -> Video {
+        let sdl_context = sdl2::init().unwrap();
         Video {
-            canvas: sdl2::init()
-                .unwrap()
+            canvas: sdl_context
                 .video()
                 .unwrap()
                 .window("gbemu", WIDTH, HEIGHT)
@@ -37,6 +43,8 @@ impl Video {
                 .into_canvas()
                 .build()
                 .unwrap(),
+
+            event_pump: sdl_context.event_pump().unwrap(),
 
             ttf_context: sdl2::ttf::init().map_err(|e| e.to_string()).unwrap(),
         }
@@ -123,8 +131,7 @@ impl Video {
     }
 
     pub fn write_smth(&mut self) {
-        let font_path = Path::new(&"data/font.ttf");
-        let mut font = self
+        let font = self
             .ttf_context
             .load_font("data/RuneScape-Chat-07.ttf", 1000)
             .map_err(|e| e.to_string())
@@ -158,5 +165,54 @@ impl Video {
             );
         }
         self.canvas.present();
+    }
+
+    pub fn check_events(&mut self) {
+        for event in self.event_pump.poll_iter() {
+            match event {
+                Event::Quit { timestamp: _ } => {
+                    println!("Terminate event received!\n");
+                    exit(0);
+                }
+                Event::KeyDown {
+                    timestamp: _,
+                    window_id: _,
+                    keycode,
+                    scancode: _,
+                    keymod: _,
+                    repeat,
+                } => {
+                    if keycode.is_none() || repeat {
+                        continue;
+                    }
+                    match keycode.unwrap() {
+                        Keycode::A => {
+                            debug!("A was pressed!\n");
+                        }
+                        _ => {}
+                    }
+                }
+                Event::KeyUp {
+                    timestamp: _,
+                    window_id: _,
+                    keycode,
+                    scancode: _,
+                    keymod: _,
+                    repeat: _,
+                } => {
+                    if keycode.is_none() {
+                        continue;
+                    }
+
+                    match keycode.unwrap() {
+                        Keycode::A => {
+                            debug!("A was released!\n");
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
     }
 }
