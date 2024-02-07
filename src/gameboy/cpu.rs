@@ -5,6 +5,7 @@ use crate::gameboy::registers::{Flag, Registers};
 use log::{debug, info};
 
 use super::instructions::Instruction;
+use super::registers;
 
 #[derive(Debug)]
 pub struct Cpu {
@@ -507,22 +508,37 @@ impl Cpu {
     }
 
     fn ret(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
-        match instruction.dst {
+        match &instruction.dst {
             instructions::Addressing::None => {
-                if instruction.opcode != 0xc9 as u8 {
-                    panic!("With this addressing function hast to be 0xc9");
-                }
-
-                let upper_byte = self.read_mem(mem, self.registers.sp + 1);
-                let lower_byte = self.read_mem(mem, self.registers.sp);
-                self.registers.pc = (upper_byte as u16) << 8 | lower_byte as u16;
-                // Prev instruction also has to be skipped
-                // TODO: look into this
-                self.registers.pc += 2;
-                self.registers.sp += 2;
+                assert_eq!(
+                    instruction.opcode, 0xc9,
+                    "With this addressing function hast to be 0xc9",
+                );
+                self.uptime -= 12; // This gets added when return is invoced, in case of
+                                   // non-conditional return, the execution time is constant
             }
+            instructions::Addressing::Flag(flag) => match flag {
+                instructions::FlagsEnum::Zero => {
+                    if !self.registers.get_flag(Flag::Zero) {
+                        return;
+                    }
+                }
+                _ => panic!("Flag not implemented for return!"),
+            },
             _ => panic!("Not implemented yet"),
         }
+
+        // Condition is met, return is invoced!
+
+        self.uptime += 12; // When condition is met, it takes additional 12 cycles
+
+        let upper_byte = self.read_mem(mem, self.registers.sp + 1);
+        let lower_byte = self.read_mem(mem, self.registers.sp);
+        self.registers.pc = (upper_byte as u16) << 8 | lower_byte as u16;
+        // Prev instruction also has to be skipped
+        // TODO: look into this
+        self.registers.pc += 2;
+        self.registers.sp += 2;
     }
 
     fn push(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
@@ -560,27 +576,25 @@ impl Cpu {
                 instructions::Registers::BC => {
                     self.registers.b = self.read_mem(mem, self.registers.sp + 1);
                     self.registers.c = self.read_mem(mem, self.registers.sp);
-                    self.registers.sp += 2;
                 }
                 instructions::Registers::DE => {
                     self.registers.d = self.read_mem(mem, self.registers.sp + 1);
                     self.registers.e = self.read_mem(mem, self.registers.sp);
-                    self.registers.sp += 2;
                 }
                 instructions::Registers::HL => {
                     self.registers.h = self.read_mem(mem, self.registers.sp + 1);
                     self.registers.l = self.read_mem(mem, self.registers.sp);
-                    self.registers.sp += 2;
                 }
                 instructions::Registers::AF => {
                     self.registers.a = self.read_mem(mem, self.registers.sp + 1);
                     self.registers.f = self.read_mem(mem, self.registers.sp);
-                    self.registers.sp += 2;
                 }
                 _ => panic!("Destination hast to be Double Register"),
             },
-            _ => panic!("destination has to be Register!"),
+            _ => panic!("Destination has to be Register!"),
         }
+
+        self.registers.sp += 2;
     }
 
     fn rl(&mut self, instruction: &Instruction) {
@@ -708,18 +722,39 @@ impl Cpu {
             "Wrong opcode for jump instruction!"
         );*/
 
-        match instructions.dst {
+        match &instructions.dst {
             instructions::Addressing::Address16 => {
                 self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16;
+                return;
             }
             instructions::Addressing::RelativeRegister(reg) => match reg {
                 instructions::Registers::HL => {
                     self.registers.pc = ((self.registers.h as u16) << 8 | self.registers.l as u16)
                         - instructions.bytes as u16;
+                    return;
                 }
                 _ => panic!("Not implemented for jump"),
             },
-            _ => panic!("Not implemented for jump"),
+            instructions::Addressing::Flag(flag) => match flag {
+                instructions::FlagsEnum::Zero => {
+                    // if flag is not set, return
+                    if !self.registers.get_flag(registers::Flag::Zero) {
+                        return;
+                    }
+                }
+                _ => panic!("Flag not implemented for jump instruction!\n"),
+            },
+            _ => panic!("Destination not implemented for jump"),
+        }
+
+        // From here on conditional jumps should be true
+
+        match &instructions.src {
+            instructions::Addressing::Address16 => {
+                self.uptime += 4; // takes longer if condition is met
+                self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16
+            }
+            _ => panic!("Source notimplemented for jump"),
         }
     }
 
@@ -787,7 +822,7 @@ impl Cpu {
         // -1 for instruction size
         self.registers.pc = target - instruction.bytes as u16;
 
-        self.print_status();
+        // self.print_status();
 
         // self.registers.sp -= 2;
         // self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
@@ -816,7 +851,13 @@ impl Cpu {
 
         self.store_value16(&instruction.dst, dst);
 
-        debug! {"Add 16 with source: {:?} (val: 0x{:02x}) and destination {:?}(val: 0x{:02x})", instruction.src, src, instruction.dst, self.get_value16(&instruction.dst, mem)}
+        debug!(
+            "Add 16 with source: {:?} (val: 0x{:02x}) and destination {:?}(val: 0x{:02x})",
+            instruction.src,
+            src,
+            instruction.dst,
+            self.get_value16(&instruction.dst, mem)
+        );
     }
 
     fn res(&mut self, instruction: &Instruction) {
