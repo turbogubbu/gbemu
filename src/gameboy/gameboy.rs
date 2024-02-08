@@ -62,10 +62,10 @@ impl Gameboy {
                 self.cpu.load_rom_boot_section = false;
             }
 
-            if self.cpu.draw_line() && self.ppu.get_lcd_ppu_enable(&self.memory.data) {
+            if self.cpu.draw_line() && self.ppu.get_lcd_ppu_enable(&self.memory) {
                 if self
                     .ppu
-                    .draw_line(&mut self.memory.data, &mut self.display.pixel_buffer)
+                    .draw_line(&mut self.memory, &mut self.display.pixel_buffer)
                 {
                     self.video.update_gameboy_frame(&self.display.pixel_buffer);
                     // self.video.draw_vram_tiles(&self.memory.data);

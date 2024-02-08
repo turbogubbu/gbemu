@@ -41,6 +41,10 @@ impl Cpu {
         self.draw_line
     }
 
+    pub fn get_ime(&self) -> bool {
+        self.ime
+    }
+
     pub fn print_status(&self) {
         println!("Cpu status:\n {}", self.registers);
         print!(" Cycles: {}", self.uptime);
@@ -109,6 +113,7 @@ impl Cpu {
             "Executing instruction {} (pc: {:04x}, opcode. {:02x})",
             instruction.name, self.registers.pc, instruction.opcode
         );
+
         match instruction.op_type {
             instructions::OpType::Load16 => self.load16(instruction, mem),
             instructions::OpType::Load8 => self.load8(instruction, mem),
@@ -129,9 +134,6 @@ impl Cpu {
             instructions::OpType::Cp => self.cp(instruction, mem),
             instructions::OpType::Sub8 => self.sub8(instruction, mem),
             instructions::OpType::Add8 => self.add8(instruction, mem),
-            instructions::OpType::Nop => {
-                return;
-            }
             instructions::OpType::Jump => self.jump(instruction, mem),
             instructions::OpType::DI => self.di(instruction),
             instructions::OpType::Or => self.or(instruction, mem),
@@ -141,6 +143,8 @@ impl Cpu {
             instructions::OpType::Swap => self.swap(instruction, mem),
             instructions::OpType::RST => self.rst(instruction, mem),
             instructions::OpType::Add16 => self.add16(instruction, mem),
+            instructions::OpType::Res => self.res(instruction),
+            instructions::OpType::Nop => return,
             instructions::OpType::Stop => {
                 info!(
                     "Received STOP instruction at PC: 0x{:04x}, exiting program",
@@ -151,7 +155,6 @@ impl Cpu {
                     self.registers.pc
                 );
             }
-            instructions::OpType::Res => self.res(instruction),
             _ => panic!(
                 "Instruction not implemented: {} 0x{:02x}",
                 instruction.name, instruction.opcode
