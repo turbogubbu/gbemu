@@ -1,5 +1,5 @@
 use crate::gameboy::display::{Display, DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
-use crate::gameboy::memory::ADDRESS_SPACE;
+use crate::gameboy::memory::Memory;
 
 #[derive(Debug)]
 pub struct Ppu {}
@@ -9,46 +9,42 @@ impl Ppu {
         Ppu {}
     }
 
-    pub fn draw_line(
-        &mut self,
-        mem: &mut [u8; ADDRESS_SPACE],
-        pixel_buff: &mut [u8; DIMENSIONS],
-    ) -> bool {
+    pub fn draw_line(&mut self, mem: &mut Memory, pixel_buff: &mut [u8; DIMENSIONS]) -> bool {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
         self.increment_lcd_y(mem)
     }
 
-    pub fn get_lcd_y(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
-        mem[0xff44]
+    pub fn get_lcd_y(&self, mem: &Memory) -> u8 {
+        mem.data[0xff44]
     }
 
-    fn increment_lcd_y(&self, mem: &mut [u8; ADDRESS_SPACE]) -> bool {
-        mem[0xff44] += 1;
-        mem[0xff44] %= 154;
+    fn increment_lcd_y(&self, mem: &mut Memory) -> bool {
+        mem.data[0xff44] += 1;
+        mem.data[0xff44] %= 154;
 
-        if mem[0xff44] == 0 {
+        if mem.data[0xff44] == 0 {
             true
         } else {
             false
         }
     }
 
-    fn get_lcd_control(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
-        mem[0xff40]
+    fn get_lcd_control(&self, mem: &Memory) -> u8 {
+        mem.data[0xff40]
     }
 
-    fn get_oam_table(&self, mem: &[u8; ADDRESS_SPACE]) -> [u8; 0xa0] {
-        core::array::from_fn(|n| mem[0xfe00 + n])
+    fn get_oam_table(&self, mem: &Memory) -> [u8; 0xa0] {
+        core::array::from_fn(|n| mem.data[0xfe00 + n])
     }
 
-    fn get_tile(&self, mem: &[u8; ADDRESS_SPACE], index: u8) -> Tile {
+    fn get_tile(&self, mem: &Memory, index: u8) -> Tile {
         Tile::new(core::array::from_fn(|n| {
-            mem[0x8000 + index as usize * 16 + n]
+            mem.data[0x8000 + index as usize * 16 + n]
         }))
     }
 
-    fn oam_scan(&self, mem: &[u8; ADDRESS_SPACE]) -> Vec<OAM> {
+    fn oam_scan(&self, mem: &Memory) -> Vec<OAM> {
         let oam_table = self.get_oam_table(mem);
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
         let obj_size: u8 = if lcd_control.obj_size { 16 } else { 8 };
@@ -75,12 +71,12 @@ impl Ppu {
         active_oam
     }
 
-    fn get_scy(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
-        mem[0xff42]
+    fn get_scy(&self, mem: &Memory) -> u8 {
+        mem.data[0xff42]
     }
 
-    fn get_scx(&self, mem: &[u8; ADDRESS_SPACE]) -> u8 {
-        mem[0xff43]
+    fn get_scx(&self, mem: &Memory) -> u8 {
+        mem.data[0xff43]
     }
 
     /// \brief Get the index of a tile from the VRAM Tile Map
@@ -89,23 +85,18 @@ impl Ppu {
     /// \param x, x pos on the tile map
     /// \param y, y pos on the thile map
     /// \retval index of the tile
-    fn get_tile_map_index(&self, mem: &[u8; ADDRESS_SPACE], x: u8, y: u8) -> u8 {
+    fn get_tile_map_index(&self, mem: &Memory, x: u8, y: u8) -> u8 {
         assert!(x < 32 && y < 32);
         let lcd_c = LcdControl::new(self.get_lcd_control(mem));
 
         if lcd_c.tile_map_area {
-            mem[0x9c00 + x as usize + y as usize * 32]
+            mem.data[0x9c00 + x as usize + y as usize * 32]
         } else {
-            mem[0x9800 + x as usize + y as usize * 32]
+            mem.data[0x9800 + x as usize + y as usize * 32]
         }
     }
 
-    fn draw_pixels(
-        &mut self,
-        mem: &[u8; ADDRESS_SPACE],
-        pixel_buff: &mut [u8; DIMENSIONS],
-        sprites: Vec<OAM>,
-    ) {
+    fn draw_pixels(&mut self, mem: &Memory, pixel_buff: &mut [u8; DIMENSIONS], sprites: Vec<OAM>) {
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
         let mut oam_fifo = [0; DIMENSIONS_X];
         let mut bg_fifo = [0; DIMENSIONS_X];
@@ -177,7 +168,7 @@ impl Ppu {
 
     fn horizontal_blank(&mut self) {}
 
-    pub fn get_lcd_ppu_enable(&self, mem: &[u8; ADDRESS_SPACE]) -> bool {
+    pub fn get_lcd_ppu_enable(&self, mem: &Memory) -> bool {
         LcdControl::new(self.get_lcd_control(mem)).enable
     }
 }
