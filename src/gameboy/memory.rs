@@ -1,6 +1,9 @@
+use crate::gameboy::joypad_input::JoypadInput;
+
 #[derive(Debug)]
 pub struct Memory {
     pub data: [u8; ADDRESS_SPACE],
+    pub joypad_input: JoypadInput,
 }
 
 pub const ADDRESS_SPACE: usize = 0x10000;
@@ -10,6 +13,7 @@ impl Memory {
     pub fn new() -> Memory {
         Memory {
             data: [0; ADDRESS_SPACE],
+            joypad_input: JoypadInput::new(),
         }
     }
 
@@ -39,8 +43,28 @@ impl Memory {
     }
 
     #[allow(dead_code)]
-    pub fn get_input_reg(&self) -> u8 {
-        self.data[JOYPAD_INPUT_ADDRESS]
+    fn get_input_reg(&self) -> u8 {
+        let higher_nibble = self.data[0xff00 as usize] >> 4;
+
+        match higher_nibble {
+            0x3 => 0x3f,
+            0x2 => self.joypad_input.get_udlr() | 0x20,
+            0x1 => self.joypad_input.get_ssba() | 0x10,
+            _ => 0x0f,
+        }
+    }
+
+    pub fn read_mem(&self, address: u16) -> u8 {
+        match address {
+            // joypad input
+            0xff00 => self.get_input_reg(),
+            // normal memory
+            _ => self.data[address as usize],
+        }
+    }
+
+    pub fn write_mem(&mut self, address: u16, value: u8) {
+        self.data[address as usize] = value;
     }
 
     #[allow(dead_code)]
@@ -77,5 +101,13 @@ impl Memory {
         }
 
         println!("\n");
+    }
+
+    pub fn print_ie_register(&self) {
+        println!("IE register: 0x{:02x}", self.data[0xffff]);
+    }
+
+    pub fn print_interrupt_flag_register(&self) {
+        println!("Interrupt flag register: 0x{:02x}", self.data[0xff0f]);
     }
 }

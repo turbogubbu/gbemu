@@ -8,6 +8,8 @@ use crate::gameboy::memory::Memory;
 use crate::gameboy::ppu::Ppu;
 use crate::util::video::Video;
 
+use super::joypad_input::JoypadInput;
+
 pub struct Gameboy {
     cpu: Cpu,
     memory: Memory,
@@ -30,7 +32,7 @@ impl Gameboy {
     pub fn init(&mut self) {
         self.memory.load_rom(fs::read("roms/tetris.gb").unwrap());
         self.cpu
-            .load_boot_rom(fs::read("roms/boot.gb").unwrap(), &mut self.memory.data);
+            .load_boot_rom(fs::read("roms/boot.gb").unwrap(), &mut self.memory);
         self.cpu.print_status();
         self.display.init(&self.memory.data);
     }
@@ -42,7 +44,7 @@ impl Gameboy {
         let mut last_vram_update = Instant::now();
 
         loop {
-            self.cpu.execute_single_instruction(&mut self.memory.data);
+            self.cpu.execute_single_instruction(&mut self.memory);
 
             if self.cpu.loading_boot_image {
                 //self.display.draw_vram_tiles(&self.memory.data);
@@ -54,7 +56,7 @@ impl Gameboy {
                 println!("boot section before loading new file");
                 self.memory.print(0x0000, 0x100);
                 self.cpu
-                    .load_boot_rom(fs::read("roms/tetris.gb").unwrap(), &mut self.memory.data);
+                    .load_boot_rom(fs::read("roms/tetris.gb").unwrap(), &mut self.memory);
                 println!("boot section after loading new file");
                 self.memory.print(0x0000, 0x100);
                 self.cpu.load_rom_boot_section = false;
@@ -79,6 +81,9 @@ impl Gameboy {
 
             if last_vram_update.elapsed() >= vram_interval {
                 self.video.draw_vram_tiles(&self.memory.data);
+                self.cpu.print_status();
+                self.memory.print_ie_register();
+                self.memory.print_interrupt_flag_register();
                 last_vram_update = Instant::now();
             }
         }
