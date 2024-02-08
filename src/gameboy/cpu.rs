@@ -7,6 +7,8 @@ use super::instructions::Instruction;
 use super::memory::Memory;
 use super::registers;
 
+const INTERRUPT_VECTOR_VBLANK: u16 = 0x40;
+
 #[derive(Debug)]
 pub struct Cpu {
     registers: Registers,
@@ -89,6 +91,58 @@ impl Cpu {
         self.increase_uptime(instruction.cycles);
     }
 
+    pub fn handle_interrupt(&mut self, mem: &mut Memory) {
+        // Check if interrupt mask is set
+        if !self.get_ime() {
+            return;
+        }
+
+        // Check if any interrupt is enbaled
+        let interrupt_enable = mem.read_mem(0xffff);
+
+        if interrupt_enable == 0x00 {
+            return;
+        }
+
+        let interrupt_flags = mem.read_mem(0xff0f);
+        if interrupt_flags == 0x00 {
+            // Check if any interrupt is set
+            return;
+        }
+
+        // Push current pc to stack
+        self.registers.sp -= 2;
+        mem.write_mem(self.registers.sp, (self.registers.pc & 0xff) as u8);
+        mem.write_mem(self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+
+        // Interrupt is about to be handled, add execution time for handling irq
+        self.increase_uptime(20);
+
+        // disable interrupts -> should be cleared by reti instruction at end of interrupt routine
+        self.ime = false;
+
+        if ((interrupt_flags & 0x01) & (interrupt_enable & 0x01)) == 0x01 {
+            // handle vblank
+            debug!("Handling Vblank interrupt");
+            self.registers.pc = INTERRUPT_VECTOR_VBLANK;
+            mem.data[0xff0f] &= !0x1;
+        } else if ((interrupt_flags & 0x02) & (interrupt_enable & 0x02)) == 0x02 {
+            // handle LCD
+            debug!("Handling LCD interrupt");
+        } else if ((interrupt_flags & 0x04) & (interrupt_enable & 0x04)) == 0x04 {
+            // handle Timer
+            debug!("Handling Timer interrupt");
+        } else if ((interrupt_flags & 0x08) & (interrupt_enable & 0x08)) == 0x08 {
+            // handle Serial
+            debug!("Handling Serial interrupt");
+        } else if ((interrupt_flags & 0x10) & (interrupt_flags & 0x10)) == 0x10 {
+            // handle joypad
+            debug!("Handling Joypad interrupt");
+        } else if interrupt_flags > 0x1f {
+            panic!("Value in interrupt flag register not known!");
+        }
+    }
+
     pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut Memory) {
         for i in 0..0x100 {
             mem.write_mem(i as u16, boot_rom[i]);
@@ -121,7 +175,7 @@ impl Cpu {
             instructions::OpType::Prefix => self.prefix(instruction),
             instructions::OpType::Bit => self.bit(instruction),
             instructions::OpType::JumpRelative => self.jump_relative(instruction, mem),
-            instructions::OpType::Inc8 => self.inc8(instruction),
+            instructions::OpType::Inc8 => self.inc8(instruction, mem),
             instructions::OpType::Dec8 => self.dec8(instruction, mem),
             instructions::OpType::Inc16 => self.inc16(instruction),
             instructions::OpType::Dec16 => self.dec16(instruction),
@@ -144,6 +198,7 @@ impl Cpu {
             instructions::OpType::RST => self.rst(instruction, mem),
             instructions::OpType::Add16 => self.add16(instruction, mem),
             instructions::OpType::Res => self.res(instruction),
+            instructions::OpType::Reti => self.reti(instruction, mem),
             instructions::OpType::Nop => return,
             instructions::OpType::Stop => {
                 info!(
@@ -444,7 +499,7 @@ impl Cpu {
     }
 
     // Increment 8bit
-    fn inc8(&mut self, instruction: &Instruction) {
+    fn inc8(&mut self, instruction: &Instruction, mem: &mut Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => {
                 if (((*self.registers.get_reg_ref(*reg) & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
@@ -462,7 +517,27 @@ impl Cpu {
                     self.registers.reset_flag(Flag::Zero);
                 }
             }
-            _ => panic!(),
+            instructions::Addressing::RelativeRegister(reg) => match reg {
+                instructions::Registers::HL => {
+                    let val = self.get_value8(&instruction.dst, mem);
+
+                    if (((val & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
+                        self.registers.set_flag(Flag::HalfCarry);
+                    } else {
+                        self.registers.reset_flag(Flag::HalfCarry);
+                    }
+
+                    self.store_value8(&instruction.dst, mem, val.wrapping_add(1));
+
+                    if val.wrapping_add(1) == 0 {
+                        self.registers.set_flag(Flag::Zero);
+                    } else {
+                        self.registers.reset_flag(Flag::Zero);
+                    }
+                }
+                _ => panic!("inc8 not implemted for this relative register!\n"),
+            },
+            _ => panic!("Inc8 not implemented for this addressing"),
         }
     }
 
@@ -534,6 +609,16 @@ impl Cpu {
         self.make_call(mem);
     }
 
+    fn exec_ret(&mut self, mem: &Memory) {
+        let upper_byte = mem.read_mem(self.registers.sp + 1);
+        let lower_byte = mem.read_mem(self.registers.sp);
+        self.registers.pc = (upper_byte as u16) << 8 | lower_byte as u16;
+        // Prev instruction also has to be skipped
+        // TODO: look into this
+        self.registers.pc += 2;
+        self.registers.sp += 2;
+    }
+
     // Return
     fn ret(&mut self, instruction: &Instruction, mem: &Memory) {
         match &instruction.dst {
@@ -551,6 +636,11 @@ impl Cpu {
                         return;
                     }
                 }
+                instructions::FlagsEnum::NonZero => {
+                    if self.registers.get_flag(Flag::Zero) {
+                        return;
+                    }
+                }
                 _ => panic!("Flag not implemented for return!"),
             },
             _ => panic!("Not implemented yet"),
@@ -559,14 +649,17 @@ impl Cpu {
         // Condition is met, return is invoced!
 
         self.uptime += 12; // When condition is met, it takes additional 12 cycles
+                           //
+        self.exec_ret(mem);
+    }
 
-        let upper_byte = mem.read_mem(self.registers.sp + 1);
-        let lower_byte = mem.read_mem(self.registers.sp);
-        self.registers.pc = (upper_byte as u16) << 8 | lower_byte as u16;
-        // Prev instruction also has to be skipped
-        // TODO: look into this
-        self.registers.pc += 2;
-        self.registers.sp += 2;
+    fn reti(&mut self, instruction: &Instruction, mem: &Memory) {
+        assert_eq!(
+            instruction.opcode, 0xd9,
+            "Reti instruction has to have opcode 0xd9"
+        );
+        self.ime = true;
+        self.exec_ret(mem);
     }
 
     // Push values to stack

@@ -46,6 +46,8 @@ impl Gameboy {
         loop {
             self.cpu.execute_single_instruction(&mut self.memory);
 
+            self.cpu.handle_interrupt(&mut self.memory);
+
             if self.cpu.loading_boot_image {
                 //self.display.draw_vram_tiles(&self.memory.data);
                 self.video.draw_vram_tiles(&self.memory.data);
