@@ -23,6 +23,11 @@ impl Ppu {
         mem.data[0xff44] += 1;
         mem.data[0xff44] %= 154;
 
+        // Set Vblank interrupt
+        if mem.data[0xff44] == 144 {
+            mem.data[0xff0f] |= 0x01;
+        }
+
         if mem.data[0xff44] == 0 {
             true
         } else {
