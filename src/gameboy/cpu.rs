@@ -1,10 +1,10 @@
 use crate::gameboy::instructions;
-use crate::gameboy::memory::ADDRESS_SPACE;
 use crate::gameboy::registers::{Flag, Registers};
 
 use log::{debug, info};
 
 use super::instructions::Instruction;
+use super::memory::Memory;
 use super::registers;
 
 #[derive(Debug)]
@@ -42,19 +42,12 @@ impl Cpu {
     }
 
     pub fn print_status(&self) {
-        print!("Cpu status:\n {}\n", self.registers);
-        print!(" Cycles: {}\n", self.uptime);
+        println!("Cpu status:\n {}", self.registers);
+        print!(" Cycles: {}", self.uptime);
+        print!(" IME: {}\n", self.ime);
     }
 
-    pub fn read_mem(&self, mem: &[u8; 0x10000], address: u16) -> u8 {
-        mem[address as usize]
-    }
-
-    pub fn write_mem(&mut self, mem: &mut [u8; 0x10000], address: u16, data: u8) {
-        mem[address as usize] = data;
-    }
-
-    pub fn execute_single_instruction(&mut self, mem: &mut [u8; 0x10000]) {
+    pub fn execute_single_instruction(&mut self, mem: &mut Memory) {
         let opcode = self.get_opcode(mem);
         let instruction = self.get_instruction(opcode);
         assert_eq!(
@@ -92,14 +85,14 @@ impl Cpu {
         self.increase_uptime(instruction.cycles);
     }
 
-    pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut [u8; 0x10000]) {
+    pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut Memory) {
         for i in 0..0x100 {
-            self.write_mem(mem, i as u16, boot_rom[i]);
+            mem.write_mem(i as u16, boot_rom[i]);
         }
     }
 
-    fn get_opcode(&self, mem: &[u8; 0x10000]) -> u8 {
-        self.read_mem(mem, self.registers.pc)
+    fn get_opcode(&self, mem: &Memory) -> u8 {
+        mem.read_mem(self.registers.pc)
     }
 
     fn get_instruction(&mut self, opcode: u8) -> &'static instructions::Instruction {
@@ -111,7 +104,7 @@ impl Cpu {
         }
     }
 
-    fn execute_instruction(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
+    fn execute_instruction(&mut self, instruction: &Instruction, mem: &mut Memory) {
         debug!(
             "Executing instruction {} (pc: {:04x}, opcode. {:02x})",
             instruction.name, self.registers.pc, instruction.opcode
@@ -124,7 +117,7 @@ impl Cpu {
             instructions::OpType::Bit => self.bit(instruction),
             instructions::OpType::JumpRelative => self.jump_relative(instruction, mem),
             instructions::OpType::Inc8 => self.inc8(instruction),
-            instructions::OpType::Dec8 => self.dec8(instruction),
+            instructions::OpType::Dec8 => self.dec8(instruction, mem),
             instructions::OpType::Inc16 => self.inc16(instruction),
             instructions::OpType::Dec16 => self.dec16(instruction),
             instructions::OpType::Call => self.call(instruction, mem),
@@ -198,15 +191,19 @@ impl Cpu {
         self.uptime += value as u64;
     }
 
-    fn get_value16_immediate(&self, mem: &[u8; 0x10000]) -> u16 {
-        let upper_byte = self.read_mem(mem, self.registers.pc + 2);
-        let lower_byte = self.read_mem(mem, self.registers.pc + 1);
+    // get 16bit value after opcode
+    fn get_value16_immediate(&self, mem: &Memory) -> u16 {
+        let upper_byte = mem.read_mem(self.registers.pc + 2);
+        let lower_byte = mem.read_mem(self.registers.pc + 1);
         (upper_byte as u16) << 8 | lower_byte as u16
     }
 
-    fn get_value16(&self, addressing: &instructions::Addressing, mem: &[u8; 0x10000]) -> u16 {
+    // Get 16bit value
+    fn get_value16(&self, addressing: &instructions::Addressing, mem: &Memory) -> u16 {
         match addressing {
-            instructions::Addressing::Immediate16 => self.get_value16_immediate(mem),
+            instructions::Addressing::Immediate16 | instructions::Addressing::Address16 => {
+                self.get_value16_immediate(mem)
+            }
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::BC => {
                     ((self.registers.b as u16) << 8) | self.registers.c as u16
@@ -224,6 +221,7 @@ impl Cpu {
         }
     }
 
+    // Store 16bit value
     fn store_value16(&mut self, addressing: &instructions::Addressing, value: u16) {
         match addressing {
             instructions::Addressing::Register(reg) => self.registers.store_16bit_reg(reg, value),
@@ -231,9 +229,10 @@ impl Cpu {
         }
     }
 
-    fn get_value8(&mut self, addressing: &instructions::Addressing, mem: &[u8; 0x10000]) -> u8 {
+    // Get 8bit value
+    fn get_value8(&mut self, addressing: &instructions::Addressing, mem: &Memory) -> u8 {
         match addressing {
-            instructions::Addressing::Immediate8 => self.read_mem(mem, self.registers.pc + 1),
+            instructions::Addressing::Immediate8 => mem.read_mem(self.registers.pc + 1),
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::A => self.registers.a,
                 instructions::Registers::B => self.registers.b,
@@ -247,12 +246,12 @@ impl Cpu {
                 }
             },
             instructions::Addressing::RelativeRegister(reg) => match reg {
-                instructions::Registers::C => self.read_mem(mem, 0xff00 + self.registers.c as u16),
-                instructions::Registers::BC => self.read_mem(mem, self.registers.get_bc()),
-                instructions::Registers::DE => self.read_mem(mem, self.registers.get_de()),
-                instructions::Registers::HL => self.read_mem(mem, self.registers.get_hl()),
+                instructions::Registers::C => mem.read_mem(0xff00 + self.registers.c as u16),
+                instructions::Registers::BC => mem.read_mem(self.registers.get_bc()),
+                instructions::Registers::DE => mem.read_mem(self.registers.get_de()),
+                instructions::Registers::HL => mem.read_mem(self.registers.get_hl()),
                 instructions::Registers::HlPlus => {
-                    let retval = self.read_mem(mem, self.registers.get_hl());
+                    let retval = mem.read_mem(self.registers.get_hl());
                     self.inc16(&instructions::INSTRUCTIONS[0x23]);
                     retval
                 }
@@ -261,11 +260,11 @@ impl Cpu {
                 }
             },
             instructions::Addressing::RelativeAddress8 => {
-                let pc_val: u16 = self.read_mem(mem, self.registers.pc + 1u16) as u16;
-                self.read_mem(mem, 0xff00 + pc_val)
+                let pc_val: u16 = mem.read_mem(self.registers.pc + 1u16) as u16;
+                mem.read_mem(0xff00 + pc_val)
             }
             instructions::Addressing::RelativeAddress16 => {
-                self.read_mem(mem, self.get_value16_immediate(mem))
+                mem.read_mem(self.get_value16_immediate(mem))
             }
             _ => {
                 panic!("Addressing mod for getValue8 not implemented yet")
@@ -273,30 +272,26 @@ impl Cpu {
         }
     }
 
-    fn store_value8(
-        &mut self,
-        addressing: &instructions::Addressing,
-        mem: &mut [u8; 0x10000],
-        value: u8,
-    ) {
+    // Store 8bit value
+    fn store_value8(&mut self, addressing: &instructions::Addressing, mem: &mut Memory, value: u8) {
         match addressing {
             instructions::Addressing::RelativeRegister(reg) => match reg {
                 instructions::Registers::HlMinus => {
-                    self.write_mem(mem, self.registers.get_hl(), value);
+                    mem.write_mem(self.registers.get_hl(), value);
                     self.dec16(&instructions::INSTRUCTIONS[0x2B]);
                 }
                 instructions::Registers::HlPlus => {
-                    self.write_mem(mem, self.registers.get_hl(), value);
+                    mem.write_mem(self.registers.get_hl(), value);
                     self.inc16(&instructions::INSTRUCTIONS[0x23]);
                 }
                 instructions::Registers::HL => {
-                    self.write_mem(mem, self.registers.get_hl(), value);
+                    mem.write_mem(self.registers.get_hl(), value);
                 }
                 instructions::Registers::DE => {
-                    self.write_mem(mem, self.registers.get_de(), value);
+                    mem.write_mem(self.registers.get_de(), value);
                 }
                 instructions::Registers::C => {
-                    self.write_mem(mem, self.registers.c as u16 + 0xff00, value);
+                    mem.write_mem(self.registers.c as u16 + 0xff00, value);
                 }
                 _ => panic!("Addressing of register for store_value8 not possible"),
             },
@@ -311,27 +306,30 @@ impl Cpu {
                 _ => panic!("Addressing of register for store_value8 not possible"),
             },
             instructions::Addressing::RelativeAddress8 => {
-                let pc_val: u16 = self.read_mem(mem, self.registers.pc + 1) as u16;
-                self.write_mem(mem, 0xff00 + pc_val, value);
+                let pc_val: u16 = mem.read_mem(self.registers.pc + 1) as u16;
+                mem.write_mem(0xff00 + pc_val, value);
             }
             instructions::Addressing::RelativeAddress16 => {
                 let address: u16 = self.get_value16_immediate(mem);
 
-                self.write_mem(mem, address, value);
+                mem.write_mem(address, value);
             }
             _ => panic!("Addressing mode for store_value16 not implemented yet"),
         }
     }
 
-    fn load16(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
+    // Load 16bit value
+    fn load16(&mut self, instruction: &Instruction, mem: &mut Memory) {
         self.store_value16(&instruction.dst, self.get_value16(&instruction.src, mem));
     }
 
-    fn load8(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
+    // Load 8bit value
+    fn load8(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let val = self.get_value8(&instruction.src, mem);
         self.store_value8(&instruction.dst, mem, val);
     }
 
+    // Decrement 16bit value
     fn dec16(&mut self, instruction: &Instruction) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => self.registers.dec16(reg),
@@ -339,6 +337,7 @@ impl Cpu {
         }
     }
 
+    // Increment 16bit value
     fn inc16(&mut self, instruction: &Instruction) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => self.registers.inc16(reg),
@@ -346,7 +345,8 @@ impl Cpu {
         }
     }
 
-    fn xor(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
+    // Xor
+    fn xor(&mut self, instruction: &Instruction, mem: &Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::A => self.registers.a ^= self.registers.a,
@@ -359,7 +359,7 @@ impl Cpu {
                 _ => panic!("Addressing of register for xor not possible"),
             },
             instructions::Addressing::Immediate8 => {
-                self.registers.a ^= self.read_mem(mem, self.registers.pc + 1);
+                self.registers.a ^= mem.read_mem(self.registers.pc + 1);
             }
             _ => panic!("Addressing mode for xor not implemented yet"),
         }
@@ -374,13 +374,14 @@ impl Cpu {
         }
     }
 
+    // Prefix instruction
     fn prefix(&mut self, _instruction: &Instruction) {
         self.prefixed = true;
     }
 
     // Tests if bit is set
     fn bit(&mut self, instruction: &Instruction) {
-        let mut set: bool = false;
+        let set: bool;
         match &instruction.src {
             instructions::Addressing::Register(reg) => match &instruction.dst {
                 instructions::Addressing::Bit(bit) => set = self.registers.check_bit(reg, bit),
@@ -398,13 +399,14 @@ impl Cpu {
         self.registers.set_flag(Flag::HalfCarry);
     }
 
-    fn jump_relative(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
+    // Jump relative to current address
+    fn jump_relative(&mut self, instruction: &Instruction, mem: &Memory) {
         match instruction.src {
             instructions::Addressing::RelativeAddress8 => match &instruction.dst {
                 instructions::Addressing::Flag(flag) => match flag {
                     instructions::FlagsEnum::NonZero => {
                         if !self.registers.get_flag(Flag::Zero) {
-                            let signed: i8 = self.read_mem(mem, self.registers.pc + 1) as i8;
+                            let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
                             if signed < 0 {
                                 self.registers.pc -= signed.abs() as u16;
                             } else {
@@ -414,7 +416,7 @@ impl Cpu {
                     }
                     instructions::FlagsEnum::Zero => {
                         if self.registers.get_flag(Flag::Zero) {
-                            let signed: i8 = self.read_mem(mem, self.registers.pc + 1) as i8;
+                            let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
                             if signed < 0 {
                                 self.registers.pc -= signed.abs() as u16;
                             } else {
@@ -425,7 +427,7 @@ impl Cpu {
                     _ => panic!("Flag for JR not implemented yet!"),
                 },
                 instructions::Addressing::None => {
-                    let signed: i8 = self.read_mem(mem, self.registers.pc + 1) as i8;
+                    let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
                     if signed < 0 {
                         self.registers.pc -= signed.abs() as u16;
                     } else {
@@ -438,6 +440,7 @@ impl Cpu {
         }
     }
 
+    // Increment 8bit
     fn inc8(&mut self, instruction: &Instruction) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => {
@@ -460,7 +463,8 @@ impl Cpu {
         }
     }
 
-    fn dec8(&mut self, instruction: &Instruction) {
+    // Decrement 8bit
+    fn dec8(&mut self, instruction: &Instruction, mem: &mut Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => {
                 if (((*self.registers.get_reg_ref(*reg) & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
@@ -478,36 +482,57 @@ impl Cpu {
                     self.registers.reset_flag(Flag::Zero);
                 }
             }
-            _ => panic!(),
+            instructions::Addressing::RelativeRegister(reg) => match reg {
+                instructions::Registers::HL => {
+                    let val = self.get_value8(&instruction.dst, mem);
+
+                    if (((val & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
+                        self.registers.set_flag(Flag::HalfCarry);
+                    } else {
+                        self.registers.reset_flag(Flag::HalfCarry);
+                    }
+
+                    self.store_value8(&instruction.dst, mem, val.wrapping_sub(1));
+
+                    if val.wrapping_sub(1) == 0 {
+                        self.registers.set_flag(Flag::Zero);
+                    } else {
+                        self.registers.reset_flag(Flag::Zero);
+                    }
+                }
+                _ => panic!("Dec8 not implemted for this relative register!\n"),
+            },
+            _ => panic!("Dec8 not implemented for this addressing"),
         }
     }
 
-    fn make_call(&mut self, mem: &mut [u8; 0x10000]) {
+    // Implementation of call
+    fn make_call(&mut self, mem: &mut Memory) {
         self.registers.sp -= 2;
-        self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
-        self.write_mem(mem, self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+        mem.write_mem(self.registers.sp, (self.registers.pc & 0xff) as u8);
+        mem.write_mem(self.registers.sp + 1, (self.registers.pc >> 8) as u8);
         // -3 because this gets added when pc is defaultly increased (instruction.bytes)
         self.registers.pc = self.get_value16_immediate(mem) - 3;
     }
 
-    fn call(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
-        let make_call: bool;
+    // Call subroutine
+    fn call(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        // let make_call: bool;
         match instruction.src {
             instructions::Addressing::Address16 => match instruction.dst {
                 instructions::Addressing::None => {
-                    make_call = true;
+                    // make_call = true;
                 }
                 _ => panic!("addressing mode not implemented"),
             },
             _ => panic!("addressing mode not implemented"),
         }
 
-        if make_call {
-            self.make_call(mem);
-        }
+        self.make_call(mem);
     }
 
-    fn ret(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
+    // Return
+    fn ret(&mut self, instruction: &Instruction, mem: &Memory) {
         match &instruction.dst {
             instructions::Addressing::None => {
                 assert_eq!(
@@ -532,8 +557,8 @@ impl Cpu {
 
         self.uptime += 12; // When condition is met, it takes additional 12 cycles
 
-        let upper_byte = self.read_mem(mem, self.registers.sp + 1);
-        let lower_byte = self.read_mem(mem, self.registers.sp);
+        let upper_byte = mem.read_mem(self.registers.sp + 1);
+        let lower_byte = mem.read_mem(self.registers.sp);
         self.registers.pc = (upper_byte as u16) << 8 | lower_byte as u16;
         // Prev instruction also has to be skipped
         // TODO: look into this
@@ -541,28 +566,29 @@ impl Cpu {
         self.registers.sp += 2;
     }
 
-    fn push(&mut self, instruction: &Instruction, mem: &mut [u8; 0x10000]) {
+    // Push values to stack
+    fn push(&mut self, instruction: &Instruction, mem: &mut Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::BC => {
                     self.registers.sp -= 2;
-                    self.write_mem(mem, self.registers.sp + 1, self.registers.b);
-                    self.write_mem(mem, self.registers.sp, self.registers.c);
+                    mem.write_mem(self.registers.sp + 1, self.registers.b);
+                    mem.write_mem(self.registers.sp, self.registers.c);
                 }
                 instructions::Registers::DE => {
                     self.registers.sp -= 2;
-                    self.write_mem(mem, self.registers.sp + 1, self.registers.d);
-                    self.write_mem(mem, self.registers.sp, self.registers.e);
+                    mem.write_mem(self.registers.sp + 1, self.registers.d);
+                    mem.write_mem(self.registers.sp, self.registers.e);
                 }
                 instructions::Registers::HL => {
                     self.registers.sp -= 2;
-                    self.write_mem(mem, self.registers.sp + 1, self.registers.h);
-                    self.write_mem(mem, self.registers.sp, self.registers.l);
+                    mem.write_mem(self.registers.sp + 1, self.registers.h);
+                    mem.write_mem(self.registers.sp, self.registers.l);
                 }
                 instructions::Registers::AF => {
                     self.registers.sp -= 2;
-                    self.write_mem(mem, self.registers.sp + 1, self.registers.a);
-                    self.write_mem(mem, self.registers.sp, self.registers.f);
+                    mem.write_mem(self.registers.sp + 1, self.registers.a);
+                    mem.write_mem(self.registers.sp, self.registers.f);
                 }
                 _ => panic!("Destination hast to be Double Register"),
             },
@@ -570,24 +596,25 @@ impl Cpu {
         }
     }
 
-    fn pop(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
+    // Pop values from stack
+    fn pop(&mut self, instruction: &Instruction, mem: &Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::BC => {
-                    self.registers.b = self.read_mem(mem, self.registers.sp + 1);
-                    self.registers.c = self.read_mem(mem, self.registers.sp);
+                    self.registers.b = mem.read_mem(self.registers.sp + 1);
+                    self.registers.c = mem.read_mem(self.registers.sp);
                 }
                 instructions::Registers::DE => {
-                    self.registers.d = self.read_mem(mem, self.registers.sp + 1);
-                    self.registers.e = self.read_mem(mem, self.registers.sp);
+                    self.registers.d = mem.read_mem(self.registers.sp + 1);
+                    self.registers.e = mem.read_mem(self.registers.sp);
                 }
                 instructions::Registers::HL => {
-                    self.registers.h = self.read_mem(mem, self.registers.sp + 1);
-                    self.registers.l = self.read_mem(mem, self.registers.sp);
+                    self.registers.h = mem.read_mem(self.registers.sp + 1);
+                    self.registers.l = mem.read_mem(self.registers.sp);
                 }
                 instructions::Registers::AF => {
-                    self.registers.a = self.read_mem(mem, self.registers.sp + 1);
-                    self.registers.f = self.read_mem(mem, self.registers.sp);
+                    self.registers.a = mem.read_mem(self.registers.sp + 1);
+                    self.registers.f = mem.read_mem(self.registers.sp);
                 }
                 _ => panic!("Destination hast to be Double Register"),
             },
@@ -597,6 +624,7 @@ impl Cpu {
         self.registers.sp += 2;
     }
 
+    // Rotate left
     fn rl(&mut self, instruction: &Instruction) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => {
@@ -619,6 +647,7 @@ impl Cpu {
         }
     }
 
+    // Rotate left arithmetic
     fn rla(&mut self, instruction: &Instruction) {
         assert_eq!(
             instruction.opcode, 0x17,
@@ -627,7 +656,8 @@ impl Cpu {
         self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x17 as usize]);
     }
 
-    fn cp(&mut self, instruction: &Instruction, mem: &[u8; 0x10000]) {
+    // Compare
+    fn cp(&mut self, instruction: &Instruction, mem: &Memory) {
         let val: u8;
         match instruction.dst {
             instructions::Addressing::Immediate8
@@ -662,7 +692,8 @@ impl Cpu {
         }
     }
 
-    fn sub8(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+    // 8bit subtraction
+    fn sub8(&mut self, instruction: &Instruction, mem: &Memory) {
         let val = self.get_value8(&instruction.dst, mem);
 
         if val > self.registers.a {
@@ -689,7 +720,8 @@ impl Cpu {
         self.registers.a = res;
     }
 
-    fn add8(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+    // 8bit add
+    fn add8(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let dst = self.get_value8(&instruction.dst, mem);
         let src = self.get_value8(&instruction.src, mem);
 
@@ -716,12 +748,8 @@ impl Cpu {
         self.store_value8(&instruction.dst, mem, result);
     }
 
-    fn jump(&mut self, instructions: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
-        /*assert_eq!(
-            instructions.opcode, 0xc3,
-            "Wrong opcode for jump instruction!"
-        );*/
-
+    // Jump
+    fn jump(&mut self, instructions: &Instruction, mem: &Memory) {
         match &instructions.dst {
             instructions::Addressing::Address16 => {
                 self.registers.pc = self.get_value16_immediate(mem) - instructions.bytes as u16;
@@ -758,12 +786,14 @@ impl Cpu {
         }
     }
 
+    // Disable interrupts
     fn di(&mut self, instruction: &Instruction) {
         assert_eq!(instruction.opcode, 0xf3, "Wrong opcode for DI");
         self.ime = false;
     }
 
-    fn or(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+    // Logical 8bit or
+    fn or(&mut self, instruction: &Instruction, mem: &Memory) {
         self.registers.a |= self.get_value8(&instruction.dst, mem);
 
         if self.registers.a == 0 {
@@ -773,17 +803,20 @@ impl Cpu {
         }
     }
 
+    // Enable interupts
     fn ei(&mut self, instruction: &Instruction) {
         assert_eq!(instruction.opcode, 0xfb, "Wrong opcode for EI");
         self.ime = true;
     }
 
+    // Complement
     fn cpl(&mut self, instruction: &Instruction) {
         assert_eq!(instruction.opcode, 0x2f, "Wrong opcode for CPL");
         self.registers.a ^= 0xff;
     }
 
-    fn and(&mut self, instruction: &Instruction, mem: &[u8; ADDRESS_SPACE]) {
+    // Logical 8bit and
+    fn and(&mut self, instruction: &Instruction, mem: &Memory) {
         let val = self.get_value8(&instruction.dst, mem);
 
         self.registers.a &= val;
@@ -795,13 +828,15 @@ impl Cpu {
         }
     }
 
-    fn swap(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+    // Swap higher and lower nibble
+    fn swap(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let mut val = self.get_value8(&instruction.dst, mem);
         val = ((val & 0x0f) << 4) | ((val & 0xf0) >> 4);
         self.store_value8(&instruction.dst, mem, val);
     }
 
-    fn rst(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+    // Call to rst addr
+    fn rst(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let /*mut*/ target: u16/* = 0x00*/;
         match &instruction.dst {
             instructions::Addressing::RstAddr(rstaddr) => target = *rstaddr,
@@ -809,20 +844,16 @@ impl Cpu {
         }
 
         self.registers.sp -= 2;
-        self.write_mem(
-            mem,
+        mem.write_mem(
             self.registers.sp,
             ((self.registers.pc + instruction.bytes as u16) & 0xff) as u8,
         );
-        self.write_mem(
-            mem,
+        mem.write_mem(
             self.registers.sp + 1,
             ((self.registers.pc + instruction.bytes as u16) >> 8) as u8,
         );
         // -1 for instruction size
         self.registers.pc = target - instruction.bytes as u16;
-
-        // self.print_status();
 
         // self.registers.sp -= 2;
         // self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
@@ -831,7 +862,8 @@ impl Cpu {
         // self.registers.pc = self.get_value16_immediate(mem) - 3;
     }
 
-    fn add16(&mut self, instruction: &Instruction, mem: &mut [u8; ADDRESS_SPACE]) {
+    // Add 16 bit values
+    fn add16(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let src = self.get_value16(&instruction.src, mem);
         let mut dst = self.get_value16(&instruction.dst, mem);
 
@@ -860,6 +892,7 @@ impl Cpu {
         );
     }
 
+    // Reset
     fn res(&mut self, instruction: &Instruction) {
         match &instruction.src {
             instructions::Addressing::Register(reg) => match &instruction.dst {
