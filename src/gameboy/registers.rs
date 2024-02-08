@@ -120,6 +120,21 @@ impl Registers {
         }
     }
 
+    pub fn get_reg_val(&self, reg: instructions::Registers) -> u8 {
+        match reg {
+            instructions::Registers::A => self.a,
+            instructions::Registers::B => self.b,
+            instructions::Registers::C => self.c,
+            instructions::Registers::D => self.d,
+            instructions::Registers::E => self.e,
+            instructions::Registers::H => self.h,
+            instructions::Registers::L => self.l,
+            _ => {
+                panic!("Cannot get reg ref");
+            }
+        }
+    }
+
     pub fn get_reg_ref(&mut self, reg: instructions::Registers) -> &mut u8 {
         match reg {
             instructions::Registers::A => &mut self.a,
@@ -277,6 +292,32 @@ impl Registers {
         }
 
         if tmp & 0x80 != 0 {
+            true
+        } else {
+            false
+        }
+    }
+
+    // shift register left arithmtically
+    // retval: if zero flag should be set
+    pub fn sla_reg(&mut self, reg: &instructions::Registers) -> bool {
+        let val: &mut u8 = self.get_reg_ref(*reg);
+
+        *val <<= 1;
+
+        if *val == 0 {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn srl_reg(&mut self, reg: &instructions::Registers) -> bool {
+        let val: &mut u8 = self.get_reg_ref(*reg);
+
+        *val >>= 1;
+
+        if *val == 0 {
             true
         } else {
             false

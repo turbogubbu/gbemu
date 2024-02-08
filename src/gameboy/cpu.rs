@@ -91,6 +91,19 @@ impl Cpu {
         self.increase_uptime(instruction.cycles);
     }
 
+    fn prepare_irq(&mut self, mem: &mut Memory) {
+        // Push current pc to stack
+        self.registers.sp -= 2;
+        mem.write_mem(self.registers.sp, (self.registers.pc & 0xff) as u8);
+        mem.write_mem(self.registers.sp + 1, (self.registers.pc >> 8) as u8);
+
+        // Interrupt is about to be handled, add execution time for handling irq
+        self.increase_uptime(20);
+
+        // disable interrupts -> should be cleared by reti instruction at end of interrupt routine
+        self.ime = false;
+    }
+
     pub fn handle_interrupt(&mut self, mem: &mut Memory) {
         // Check if interrupt mask is set
         if !self.get_ime() {
@@ -110,22 +123,12 @@ impl Cpu {
             return;
         }
 
-        // Push current pc to stack
-        self.registers.sp -= 2;
-        mem.write_mem(self.registers.sp, (self.registers.pc & 0xff) as u8);
-        mem.write_mem(self.registers.sp + 1, (self.registers.pc >> 8) as u8);
-
-        // Interrupt is about to be handled, add execution time for handling irq
-        self.increase_uptime(20);
-
-        // disable interrupts -> should be cleared by reti instruction at end of interrupt routine
-        self.ime = false;
-
         if ((interrupt_flags & 0x01) & (interrupt_enable & 0x01)) == 0x01 {
             // handle vblank
-            debug!("Handling Vblank interrupt");
+            info!("Handling Vblank interrupt");
+            self.prepare_irq(mem);
+            mem.data[0xff0f] &= !0x1; // reset request flag
             self.registers.pc = INTERRUPT_VECTOR_VBLANK;
-            mem.data[0xff0f] &= !0x1;
         } else if ((interrupt_flags & 0x02) & (interrupt_enable & 0x02)) == 0x02 {
             // handle LCD
             debug!("Handling LCD interrupt");
@@ -173,7 +176,7 @@ impl Cpu {
             instructions::OpType::Load8 => self.load8(instruction, mem),
             instructions::OpType::Xor => self.xor(instruction, mem),
             instructions::OpType::Prefix => self.prefix(instruction),
-            instructions::OpType::Bit => self.bit(instruction),
+            instructions::OpType::Bit => self.bit(instruction, mem),
             instructions::OpType::JumpRelative => self.jump_relative(instruction, mem),
             instructions::OpType::Inc8 => self.inc8(instruction, mem),
             instructions::OpType::Dec8 => self.dec8(instruction, mem),
@@ -197,8 +200,10 @@ impl Cpu {
             instructions::OpType::Swap => self.swap(instruction, mem),
             instructions::OpType::RST => self.rst(instruction, mem),
             instructions::OpType::Add16 => self.add16(instruction, mem),
-            instructions::OpType::Res => self.res(instruction),
+            instructions::OpType::Res => self.res(instruction, mem),
             instructions::OpType::Reti => self.reti(instruction, mem),
+            instructions::OpType::SLA => self.sla(instruction),
+            instructions::OpType::SRL => self.srl(instruction, mem),
             instructions::OpType::Nop => return,
             instructions::OpType::Stop => {
                 info!(
@@ -311,6 +316,11 @@ impl Cpu {
                 instructions::Registers::HlPlus => {
                     let retval = mem.read_mem(self.registers.get_hl());
                     self.inc16(&instructions::INSTRUCTIONS[0x23]);
+                    retval
+                }
+                instructions::Registers::HlMinus => {
+                    let retval = mem.read_mem(self.registers.get_hl());
+                    self.dec16(&instructions::INSTRUCTIONS[0x23]);
                     retval
                 }
                 _ => {
@@ -438,13 +448,21 @@ impl Cpu {
     }
 
     // Tests if bit is set
-    fn bit(&mut self, instruction: &Instruction) {
+    fn bit(&mut self, instruction: &Instruction, mem: &Memory) {
         let set: bool;
         match &instruction.src {
             instructions::Addressing::Register(reg) => match &instruction.dst {
                 instructions::Addressing::Bit(bit) => set = self.registers.check_bit(reg, bit),
                 _ => panic!("Destination of bit() function must be a bit!"),
             },
+            instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
+                match &instruction.dst {
+                    instructions::Addressing::Bit(bit) => {
+                        set = (mem.data[self.registers.get_hl() as usize] & bit) > 0;
+                    }
+                    _ => panic!("Destination of bit() function must be a bit!"),
+                }
+            }
             _ => panic!("Must be register"),
         }
 
@@ -660,6 +678,8 @@ impl Cpu {
         );
         self.ime = true;
         self.exec_ret(mem);
+        // TODO: somehow smth is wrong with the call / return stuff...
+        self.registers.pc -= 3;
     }
 
     // Push values to stack
@@ -866,6 +886,11 @@ impl Cpu {
                         return;
                     }
                 }
+                instructions::FlagsEnum::NonZero => {
+                    if self.registers.get_flag(registers::Flag::Zero) {
+                        return;
+                    }
+                }
                 _ => panic!("Flag not implemented for jump instruction!\n"),
             },
             _ => panic!("Destination not implemented for jump"),
@@ -989,13 +1014,64 @@ impl Cpu {
     }
 
     // Reset
-    fn res(&mut self, instruction: &Instruction) {
+    fn res(&mut self, instruction: &Instruction, mem: &mut Memory) {
         match &instruction.src {
             instructions::Addressing::Register(reg) => match &instruction.dst {
                 instructions::Addressing::Bit(bit) => self.registers.reset_bit(reg, bit),
                 _ => panic!("Destination of bit() function must be a bit!"),
             },
+            instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
+                match &instruction.dst {
+                    instructions::Addressing::Bit(bit) => {
+                        mem.data[self.registers.get_hl() as usize] &= !bit;
+                    }
+                    _ => panic!("Destination of bit() function must be a bit!"),
+                }
+            }
             _ => panic!("Must be register"),
+        }
+    }
+
+    // Shift left arithmetically
+    fn sla(&mut self, instruction: &Instruction) {
+        match &instruction.dst {
+            instructions::Addressing::Register(reg) => {
+                if self.registers.get_reg_val(*reg) & 0x80 == 0x80 {
+                    self.registers.set_flag(Flag::Carry);
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
+                }
+
+                self.registers.sla_reg(reg);
+
+                if self.registers.get_reg_val(*reg) == 0x00 {
+                    self.registers.set_flag(Flag::Zero);
+                } else {
+                    self.registers.reset_flag(Flag::Zero);
+                }
+            }
+            _ => panic!("SLA not implemented for this dst addressing"),
+        }
+    }
+
+    fn srl(&mut self, instruction: &Instruction, mem: &Memory) {
+        match &instruction.dst {
+            instructions::Addressing::Register(reg) => {
+                if self.registers.get_reg_val(*reg) & 0x01 == 0x01 {
+                    self.registers.set_flag(Flag::Carry);
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
+                }
+
+                self.registers.srl_reg(reg);
+
+                if self.registers.get_reg_val(*reg) == 0x00 {
+                    self.registers.set_flag(Flag::Zero);
+                } else {
+                    self.registers.reset_flag(Flag::Zero);
+                }
+            }
+            _ => panic!("SRL not implemented for this dst addressing!"),
         }
     }
 }
