@@ -104,6 +104,46 @@ impl JoypadInput {
         self.select = false;
     }
 
+    #[inline(always)]
+    pub fn get_a(&self) -> bool {
+        self.a
+    }
+
+    #[inline(always)]
+    pub fn get_b(&self) -> bool {
+        self.b
+    }
+
+    #[inline(always)]
+    pub fn get_up(&self) -> bool {
+        self.up
+    }
+
+    #[inline(always)]
+    pub fn get_down(&self) -> bool {
+        self.down
+    }
+
+    #[inline(always)]
+    pub fn get_left(&self) -> bool {
+        self.left
+    }
+
+    #[inline(always)]
+    pub fn get_right(&self) -> bool {
+        self.right
+    }
+
+    #[inline(always)]
+    pub fn get_start(&self) -> bool {
+        self.start
+    }
+
+    #[inline(always)]
+    pub fn get_select(&self) -> bool {
+        self.select
+    }
+
     pub fn get_ssba(&self) -> u8 {
         let mut val: u8 = 0x0f;
 
