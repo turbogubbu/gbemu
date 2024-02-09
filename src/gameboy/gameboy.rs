@@ -47,33 +47,51 @@ impl Gameboy {
 
         let mut start: u64 = 0;
         let mut end: u64 = 0;
-        let mut execute_instruction_time: u64 = 0;
         let mut handle_interrupt_time: u64 = 0;
-        let mut ppu_time: u64 = 0;
+        let mut ppu_start: u64 = 0;
         let mut event_time: u64 = 0;
         let mut misc_stuff_time: u64 = 0;
+        let mut draw_line_time: u64 = 0;
+        let mut update_frame_time: u64 = 0;
+        let mut update_frame_time2: u64 = 0;
+        let mut handle_boot_image_time: u64 = 0;
+        let mut font_time: u64 = 0;
+        let mut draw_display_time: u64 = 0;
+
         let mut sum_time: u64 = 0;
+        let mut sum_handle_instruction_time: u64 = 0;
+        let mut sum_handle_interrupt_time: u64 = 0;
+        let mut sum_handle_boot_image_time: u64 = 0;
+        let mut sum_handle_ppu: u64 = 0;
+        let mut sum_handle_event: u64 = 0;
+        let mut sum_misc_time: u64 = 0;
+        let mut sum_draw_line_time: u64 = 0;
+        let mut sum_update_frame_time: u64 = 0;
+        let mut sum_draw_text_time: u64 = 0;
+        let mut sum_draw_display_time: u64 = 0;
 
         loop {
+            // ----------------- Benchmarking ------------------- //
             unsafe {
                 start = _rdtsc();
             }
+            // ----------------- Benchmarking ------------------- //
 
             self.cpu.execute_single_instruction(&mut self.memory);
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
-                end = _rdtsc();
+                handle_interrupt_time = _rdtsc();
             }
-
-            execute_instruction_time += end - start;
-            start = end;
+            // ----------------- Benchmarking ------------------- //
 
             self.cpu.handle_interrupt(&mut self.memory);
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
-                end = _rdtsc();
+                handle_boot_image_time = _rdtsc();
             }
-            handle_interrupt_time += end - start;
+            // ----------------- Benchmarking ------------------- //
 
             if self.cpu.loading_boot_image {
                 //self.display.draw_vram_tiles(&self.memory.data);
@@ -82,48 +100,76 @@ impl Gameboy {
             }
 
             if self.cpu.load_rom_boot_section {
-                println!("boot section before loading new file");
-                self.memory.print(0x0000, 0x100);
+                // println!("boot section before loading new file");
+                // self.memory.print(0x0000, 0x100);
                 self.cpu
                     .load_boot_rom(fs::read("roms/tetris.gb").unwrap(), &mut self.memory);
-                println!("boot section after loading new file");
-                self.memory.print(0x0000, 0x100);
+                // println!("boot section after loading new file");
+                // self.memory.print(0x0000, 0x100);
                 self.cpu.load_rom_boot_section = false;
             }
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
-                start = _rdtsc();
+                ppu_start = _rdtsc();
             }
+            // ----------------- Benchmarking ------------------- //
 
             if self.cpu.draw_line() && self.ppu.get_lcd_ppu_enable(&self.memory) {
                 if self
                     .ppu
                     .draw_line(&mut self.memory, &mut self.display.pixel_buffer)
                 {
-                    self.video.update_gameboy_frame(&self.display.pixel_buffer);
-                    // self.video.draw_vram_tiles(&self.memory.data);
+                    // ----------------- Benchmarking ------------------- //
+                    unsafe {
+                        draw_line_time = _rdtsc();
+                    }
+                    unsafe {
+                        update_frame_time = _rdtsc();
+                    }
+                    // ----------------- Benchmarking ------------------- //
 
+                    self.video.update_gameboy_frame(&self.display.pixel_buffer);
+
+                    // ----------------- Benchmarking ------------------- //
+                    unsafe {
+                        font_time = _rdtsc();
+                    }
+                    // ----------------- Benchmarking ------------------- //
+
+                    // self.video.draw_vram_tiles(&self.memory.data);
                     self.video.write_smth();
+
+                    // ----------------- Benchmarking ------------------- //
+                    unsafe {
+                        update_frame_time2 = _rdtsc();
+                    }
+                    // ----------------- Benchmarking ------------------- //
+                } else {
+                    // ----------------- Benchmarking ------------------- //
+                    unsafe {
+                        draw_line_time = _rdtsc();
+                    }
+                    // ----------------- Benchmarking ------------------- //
                 }
             }
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
-                end = _rdtsc();
+                event_time = _rdtsc();
             }
-
-            ppu_time += end - start;
-            start = end;
+            // ----------------- Benchmarking ------------------- //
 
             if last_event_check.elapsed() >= event_interval {
                 self.video.check_events();
                 last_event_check = Instant::now();
             }
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
-                end = _rdtsc();
+                misc_stuff_time = _rdtsc();
             }
-            event_time += end - start;
-            start = end;
+            // ----------------- Benchmarking ------------------- //
 
             if last_vram_update.elapsed() >= vram_interval {
                 self.video.draw_vram_tiles(&self.memory.data);
@@ -135,30 +181,68 @@ impl Gameboy {
                 println!("Ppu enabled: {}", self.ppu.get_lcd_ppu_enable(&self.memory));
 
                 print!(
-                    "Benchmarking:\n  Instruction execution: {:10} ({}%)\n  Handle interrupt:      {:10} ({}%)\n  Ppu execution:         {:10} ({}%)\n  Event execution:       {:10} ({}%)\n  Misc execution:        {:10} ({}%)\n",
-                    execute_instruction_time,
-                    execute_instruction_time as f64 / sum_time as f64 * 100.0,
-                    handle_interrupt_time,
-                    handle_interrupt_time as f64 / sum_time as f64 * 100.0,
-                    ppu_time,
-                    ppu_time as f64 / sum_time as f64 * 100.0,
-                    event_time,
-                    event_time as f64 / sum_time as f64 * 100.0,
-                    misc_stuff_time,
-                    misc_stuff_time as f64 / sum_time as f64 * 100.0
+                    "Benchmarking:\n\
+                       Total execution:       {:15} ({:3.3}%)\n\
+                       Instruction execution: {:15} ({:3.3}%)\n\
+                       Handle interrupt:      {:15} ({:3.3}%)\n\
+                       Ppu execution:         {:15} ({:3.3}%)\n\
+                       Event execution:       {:15} ({:3.3}%)\n\
+                       Misc execution:        {:15} ({:3.3}%)\n\
+                       Handle boot execution: {:15} ({:3.3}%)\n\
+                       Draw line execution:   {:15} ({:3.3}%)\n\
+                       Video execution:       {:15} ({:3.3}%)\n\
+                       Display display:       {:15} ({:3.3}%)\n\
+                       Font display:          {:15} ({:3.3}%)\n",
+                    sum_time,
+                    sum_time as f64 / sum_time as f64 * 100.0,
+                    sum_handle_instruction_time,
+                    sum_handle_instruction_time as f64 / sum_time as f64 * 100.0,
+                    sum_handle_interrupt_time,
+                    sum_handle_interrupt_time as f64 / sum_time as f64 * 100.0,
+                    sum_handle_ppu,
+                    sum_handle_ppu as f64 / sum_time as f64 * 100.0,
+                    sum_handle_event,
+                    sum_handle_event as f64 / sum_time as f64 * 100.0,
+                    sum_misc_time,
+                    sum_misc_time as f64 / sum_time as f64 * 100.0,
+                    sum_handle_boot_image_time,
+                    sum_handle_boot_image_time as f64 / sum_time as f64 * 100.0,
+                    sum_draw_line_time,
+                    sum_draw_line_time as f64 / sum_time as f64 * 100.0,
+                    sum_update_frame_time,
+                    sum_update_frame_time as f64 / sum_time as f64 * 100.0,
+                    sum_draw_display_time,
+                    sum_draw_display_time as f64 / sum_time as f64 * 100.0,
+                    sum_draw_text_time,
+                    sum_draw_text_time as f64 / sum_time as f64 * 100.0
                 );
             }
 
+            // ----------------- Benchmarking ------------------- //
             unsafe {
                 end = _rdtsc();
             }
-            misc_stuff_time += end - start;
 
-            sum_time = execute_instruction_time
-                + handle_interrupt_time
-                + ppu_time
-                + event_time
-                + misc_stuff_time;
+            sum_time += end - start;
+            sum_handle_instruction_time += handle_interrupt_time - start;
+            sum_handle_interrupt_time += handle_boot_image_time - handle_interrupt_time;
+            sum_handle_boot_image_time += ppu_start - handle_boot_image_time;
+            sum_handle_ppu += event_time - ppu_start;
+            sum_handle_event += misc_stuff_time - event_time;
+            sum_misc_time += end - misc_stuff_time;
+
+            if draw_line_time != 0 {
+                sum_draw_line_time += draw_line_time - ppu_start;
+                draw_line_time = 0;
+            }
+
+            if update_frame_time != 0 {
+                sum_update_frame_time += update_frame_time2 - update_frame_time;
+                sum_draw_display_time += font_time - update_frame_time;
+                sum_draw_text_time += update_frame_time2 - font_time;
+                update_frame_time = 0;
+            }
+            // ----------------- Benchmarking ------------------- //
         }
     }
 }
