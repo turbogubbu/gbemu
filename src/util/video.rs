@@ -98,9 +98,9 @@ impl Video {
 
     fn draw_pixel(&mut self, x: i32, y: i32, color: u8) {
         self.canvas.set_draw_color(Color::RGB(
-            63 + color * 64,
-            63 + color * 64,
-            63 + color * 64,
+            155 - color * 51,
+            188 - color * 62,
+            15 - color * 5,
         ));
         let rect: Rect = Rect::new(x, y, PIXEL, PIXEL);
         self.canvas.draw_rect(rect).unwrap();
