@@ -1,9 +1,16 @@
 use crate::gameboy::joypad_input::JoypadInput;
 
+#[derive(Debug, PartialEq)]
+enum CartridgeType {
+    RomOnly,
+    NotImplemented,
+}
+
 #[derive(Debug)]
 pub struct Memory {
     pub data: [u8; ADDRESS_SPACE],
     pub joypad_input: JoypadInput,
+    cartridge_type: CartridgeType,
 }
 
 pub const ADDRESS_SPACE: usize = 0x10000;
@@ -14,6 +21,7 @@ impl Memory {
         Memory {
             data: [0; ADDRESS_SPACE],
             joypad_input: JoypadInput::new(),
+            cartridge_type: CartridgeType::NotImplemented,
         }
     }
 
@@ -36,6 +44,15 @@ impl Memory {
     pub fn load_rom(&mut self, rom: Vec<u8>) {
         for i in 0..rom.len() {
             self.data[i] = rom[i];
+        }
+
+        if self.data[0x147] == 0x00 {
+            self.cartridge_type = CartridgeType::RomOnly;
+        } else {
+            panic!(
+                "Cartridge type is not ROM only! (it is: 0x{:02x})\n",
+                self.data[0x147]
+            );
         }
 
         // This sets all buttons to not pressed!
@@ -64,6 +81,10 @@ impl Memory {
     }
 
     pub fn write_mem(&mut self, address: u16, value: u8) {
+        if self.cartridge_type == CartridgeType::RomOnly && address <= 0x3fff {
+            return;
+        }
+
         self.data[address as usize] = value;
     }
 
@@ -82,6 +103,7 @@ impl Memory {
         ]
     }
 
+    #[allow(dead_code)]
     pub fn print(&self, start_address: u16, len: u16) {
         println!("        00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f");
 

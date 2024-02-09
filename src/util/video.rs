@@ -50,53 +50,6 @@ impl Video {
         }
     }
 
-    #[warn(dead_code)]
-    pub fn init(&mut self) {
-        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
-        self.canvas.clear();
-        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        // Lines for lcd
-        self.canvas
-            .draw_line(
-                Point::new(0, 0),
-                Point::new(DIMENSIONS_X as i32 * PIXEL as i32, 0),
-            )
-            .unwrap();
-        self.canvas
-            .draw_line(
-                Point::new(DIMENSIONS_X as i32 * PIXEL as i32, 0),
-                Point::new(
-                    DIMENSIONS_X as i32 * PIXEL as i32,
-                    DIMENSIONS_Y as i32 * PIXEL as i32,
-                ),
-            )
-            .unwrap();
-        self.canvas
-            .draw_line(
-                Point::new(
-                    DIMENSIONS_X as i32 * PIXEL as i32,
-                    DIMENSIONS_Y as i32 * PIXEL as i32,
-                ),
-                Point::new(0, DIMENSIONS_Y as i32 * PIXEL as i32),
-            )
-            .unwrap();
-        self.canvas
-            .draw_line(
-                Point::new(0, DIMENSIONS_Y as i32 * PIXEL as i32),
-                Point::new(0, 0),
-            )
-            .unwrap();
-        // Line for tiles
-        self.canvas
-            .draw_line(
-                Point::new(WIDTH as i32 - 8 * 8 * 2 - 1, 0),
-                Point::new(WIDTH as i32 - 8 * 8 * 2 - 1, HEIGHT as i32),
-            )
-            .unwrap();
-
-        self.canvas.present();
-    }
-
     fn draw_pixel(&mut self, x: i32, y: i32, color: u8) {
         self.canvas.set_draw_color(Color::RGB(
             155 - color * 41,

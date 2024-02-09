@@ -142,13 +142,16 @@ impl Cpu {
             // handle joypad
             debug!("Handling Joypad interrupt");
         } else if interrupt_flags > 0x1f {
-            panic!("Value in interrupt flag register not known!");
+            panic!(
+                "Value in interrupt flag register not known: 0x{:02x}!",
+                interrupt_flags
+            );
         }
     }
 
     pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut Memory) {
         for i in 0..0x100 {
-            mem.write_mem(i as u16, boot_rom[i]);
+            mem.data[i as usize] = boot_rom[i];
         }
     }
 
@@ -201,9 +204,12 @@ impl Cpu {
             instructions::OpType::RST => self.rst(instruction, mem),
             instructions::OpType::Add16 => self.add16(instruction, mem),
             instructions::OpType::Res => self.res(instruction, mem),
+            instructions::OpType::Set => self.set(instruction, mem),
             instructions::OpType::Reti => self.reti(instruction, mem),
             instructions::OpType::SLA => self.sla(instruction),
             instructions::OpType::SRL => self.srl(instruction, mem),
+            instructions::OpType::RLCA => self.rlca(),
+            instructions::OpType::ADC => self.adc(instruction, mem),
             instructions::OpType::Nop => return,
             instructions::OpType::Stop => {
                 info!(
@@ -361,7 +367,10 @@ impl Cpu {
                 instructions::Registers::C => {
                     mem.write_mem(self.registers.c as u16 + 0xff00, value);
                 }
-                _ => panic!("Addressing of register for store_value8 not possible"),
+                _ => panic!(
+                    "Addressing of register for store_value8 not possible, pc: 0x{:04x}",
+                    self.registers.pc
+                ),
             },
             instructions::Addressing::Register(reg) => match reg {
                 instructions::Registers::A => self.registers.a = value,
@@ -492,6 +501,16 @@ impl Cpu {
                     }
                     instructions::FlagsEnum::Zero => {
                         if self.registers.get_flag(Flag::Zero) {
+                            let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
+                            if signed < 0 {
+                                self.registers.pc -= signed.abs() as u16;
+                            } else {
+                                self.registers.pc += signed.abs() as u16;
+                            }
+                        }
+                    }
+                    instructions::FlagsEnum::Carry => {
+                        if self.registers.get_flag(Flag::Carry) {
                             let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
                             if signed < 0 {
                                 self.registers.pc -= signed.abs() as u16;
@@ -1023,7 +1042,7 @@ impl Cpu {
             instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
                 match &instruction.dst {
                     instructions::Addressing::Bit(bit) => {
-                        mem.data[self.registers.get_hl() as usize] &= !bit;
+                        mem.data[self.registers.get_hl() as usize] &= !(1 << bit);
                     }
                     _ => panic!("Destination of bit() function must be a bit!"),
                 }
@@ -1072,6 +1091,72 @@ impl Cpu {
                 }
             }
             _ => panic!("SRL not implemented for this dst addressing!"),
+        }
+    }
+
+    fn rlca(&mut self) {
+        let carry = self.registers.a & 0x80 == 0x80;
+
+        if carry {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        self.registers.a <<= 1;
+
+        if carry {
+            self.registers.a |= 0x01;
+        }
+    }
+
+    fn adc(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let dst = self.get_value8(&instruction.dst, mem);
+        let src = self.get_value8(&instruction.src, mem);
+        let carry = if self.registers.get_flag(Flag::Carry) {
+            1
+        } else {
+            0
+        };
+
+        let sum: u16 = dst as u16 + src as u16 + carry;
+
+        if sum & 0x00ff == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        if sum > 0x00ff {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        if ((src & 0x0f) + (dst & 0x0f) + carry as u8) > 0x0f {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
+        }
+
+        self.store_value8(&instruction.dst, mem, (sum & 0x00ff) as u8);
+    }
+
+    fn set(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        match &instruction.src {
+            instructions::Addressing::Register(reg) => match &instruction.dst {
+                instructions::Addressing::Bit(bit) => self.registers.set_bit(reg, bit),
+                _ => panic!("Destination of bit() function must be a bit!"),
+            },
+            instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
+                match &instruction.dst {
+                    instructions::Addressing::Bit(bit) => {
+                        mem.data[self.registers.get_hl() as usize] |= 1 << bit;
+                    }
+                    _ => panic!("Destination of bit() function must be a bit!"),
+                }
+            }
+            _ => panic!("Must be register"),
         }
     }
 }
