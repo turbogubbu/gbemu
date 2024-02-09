@@ -181,6 +181,7 @@ impl Gameboy {
 
                 println!("Ppu enabled: {}", self.ppu.get_lcd_ppu_enable(&self.memory));
 
+                /*
                 print!(
                     "Benchmarking:\n\
                        Total execution:           {:15} ({:3.3}%)\n\
@@ -216,7 +217,7 @@ impl Gameboy {
                     sum_draw_display_time as f64 / sum_time as f64 * 100.0,
                     sum_draw_text_time,
                     sum_draw_text_time as f64 / sum_time as f64 * 100.0
-                );
+                );*/
 
                 println!("Average loop time: {:15}", sum_time / loop_count);
             }
