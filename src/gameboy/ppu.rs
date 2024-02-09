@@ -1,6 +1,8 @@
 use crate::gameboy::display::{Display, DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
 use crate::gameboy::memory::Memory;
 
+use core::arch::x86_64::_rdtsc;
+
 #[derive(Debug)]
 pub struct Ppu {}
 
@@ -117,7 +119,7 @@ impl Ppu {
         }
 
         if lcd_control.obj_enable {
-            for (i, sprite) in sprites.iter().enumerate() {
+            for sprite in sprites {
                 let pos = sprite.x_pos as i16 - 8;
                 let y = self.get_lcd_y(mem) - sprite.y_pos;
                 let tile = self.get_tile(mem, sprite.index);
@@ -133,6 +135,9 @@ impl Ppu {
             }
         }
 
+        // this part takes some major execution time
+        // however, in the release build this is extremely optimized and does not have an major
+        // impact
         for i in 0..160 {
             // todo: no check of any registers, just trying to get the bootscreen running
             // good reference for ppu processing: http://pixelbits.16-b.it/GBEDG/ppu/#a-word-of-warning
@@ -167,8 +172,6 @@ impl Ppu {
                 pixel_buff[ly as usize * DIMENSIONS_X + i] = oam_fifo[i];
             }
         }
-
-        // println!("Scx: {}, Scy: {}", self.get_scx(mem), self.get_scy(mem));
     }
 
     fn horizontal_blank(&mut self) {}

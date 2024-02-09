@@ -10,8 +10,6 @@ use crate::util::video::Video;
 
 use core::arch::x86_64::_rdtsc;
 
-use super::joypad_input::JoypadInput;
-
 pub struct Gameboy {
     cpu: Cpu,
     memory: Memory,
@@ -56,6 +54,7 @@ impl Gameboy {
         let mut update_frame_time2: u64 = 0;
         let mut handle_boot_image_time: u64;
         let mut font_time: u64 = 0;
+        let mut loop_count: u64 = 0;
 
         let mut sum_time: u64 = 0;
         let mut sum_handle_instruction_time: u64 = 0;
@@ -128,7 +127,11 @@ impl Gameboy {
                     }
                     // ----------------- Benchmarking ------------------- //
 
-                    self.video.update_gameboy_frame(&self.display.pixel_buffer);
+                    self.video
+                        .update_gameboy_frame(&mut self.display.pixel_buffer);
+                    self.video.draw_buttons(&self.memory.joypad_input);
+
+                    self.video.present();
 
                     // ----------------- Benchmarking ------------------- //
                     unsafe {
@@ -136,7 +139,6 @@ impl Gameboy {
                     }
                     // ----------------- Benchmarking ------------------- //
 
-                    // self.video.draw_vram_tiles(&self.memory.data);
                     self.video.write_smth();
 
                     // ----------------- Benchmarking ------------------- //
@@ -160,7 +162,7 @@ impl Gameboy {
             // ----------------- Benchmarking ------------------- //
 
             if last_event_check.elapsed() >= event_interval {
-                self.video.check_events();
+                self.video.check_events(&mut self.memory.joypad_input);
                 last_event_check = Instant::now();
             }
 
@@ -215,6 +217,8 @@ impl Gameboy {
                     sum_draw_text_time,
                     sum_draw_text_time as f64 / sum_time as f64 * 100.0
                 );
+
+                println!("Average loop time: {:15}", sum_time / loop_count);
             }
 
             // ----------------- Benchmarking ------------------- //
@@ -222,6 +226,7 @@ impl Gameboy {
                 end = _rdtsc();
             }
 
+            loop_count += 1;
             sum_time += end - start;
             sum_handle_instruction_time += handle_interrupt_time - start;
             sum_handle_interrupt_time += handle_boot_image_time - handle_interrupt_time;
