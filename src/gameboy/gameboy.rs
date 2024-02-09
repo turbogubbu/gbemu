@@ -45,18 +45,17 @@ impl Gameboy {
         let mut last_event_check = Instant::now();
         let mut last_vram_update = Instant::now();
 
-        let mut start: u64 = 0;
-        let mut end: u64 = 0;
-        let mut handle_interrupt_time: u64 = 0;
-        let mut ppu_start: u64 = 0;
-        let mut event_time: u64 = 0;
-        let mut misc_stuff_time: u64 = 0;
+        let mut start: u64;
+        let mut end: u64;
+        let mut handle_interrupt_time: u64;
+        let mut ppu_start: u64;
+        let mut event_time: u64;
+        let mut misc_stuff_time: u64;
         let mut draw_line_time: u64 = 0;
         let mut update_frame_time: u64 = 0;
         let mut update_frame_time2: u64 = 0;
-        let mut handle_boot_image_time: u64 = 0;
+        let mut handle_boot_image_time: u64;
         let mut font_time: u64 = 0;
-        let mut draw_display_time: u64 = 0;
 
         let mut sum_time: u64 = 0;
         let mut sum_handle_instruction_time: u64 = 0;
@@ -182,31 +181,31 @@ impl Gameboy {
 
                 print!(
                     "Benchmarking:\n\
-                       Total execution:       {:15} ({:3.3}%)\n\
-                       Instruction execution: {:15} ({:3.3}%)\n\
-                       Handle interrupt:      {:15} ({:3.3}%)\n\
-                       Ppu execution:         {:15} ({:3.3}%)\n\
-                       Event execution:       {:15} ({:3.3}%)\n\
-                       Misc execution:        {:15} ({:3.3}%)\n\
-                       Handle boot execution: {:15} ({:3.3}%)\n\
-                       Draw line execution:   {:15} ({:3.3}%)\n\
-                       Video execution:       {:15} ({:3.3}%)\n\
-                       Display display:       {:15} ({:3.3}%)\n\
-                       Font display:          {:15} ({:3.3}%)\n",
+                       Total execution:           {:15} ({:3.3}%)\n\
+                       Instruction execution:     {:15} ({:3.3}%)\n\
+                       Handle interrupt:          {:15} ({:3.3}%)\n\
+                       Event execution:           {:15} ({:3.3}%)\n\
+                       Misc execution:            {:15} ({:3.3}%)\n\
+                       Handle boot execution:     {:15} ({:3.3}%)\n\
+                       Ppu execution:             {:15} ({:3.3}%)\n  \
+                       - Draw line execution:   {:15} ({:3.3}%)\n  \
+                       - Video execution:       {:15} ({:3.3}%)\n    \
+                       - Display screen:      {:15} ({:3.3}%)\n    \
+                       - Font display:        {:15} ({:3.3}%)\n",
                     sum_time,
                     sum_time as f64 / sum_time as f64 * 100.0,
                     sum_handle_instruction_time,
                     sum_handle_instruction_time as f64 / sum_time as f64 * 100.0,
                     sum_handle_interrupt_time,
                     sum_handle_interrupt_time as f64 / sum_time as f64 * 100.0,
-                    sum_handle_ppu,
-                    sum_handle_ppu as f64 / sum_time as f64 * 100.0,
                     sum_handle_event,
                     sum_handle_event as f64 / sum_time as f64 * 100.0,
                     sum_misc_time,
                     sum_misc_time as f64 / sum_time as f64 * 100.0,
                     sum_handle_boot_image_time,
                     sum_handle_boot_image_time as f64 / sum_time as f64 * 100.0,
+                    sum_handle_ppu,
+                    sum_handle_ppu as f64 / sum_time as f64 * 100.0,
                     sum_draw_line_time,
                     sum_draw_line_time as f64 / sum_time as f64 * 100.0,
                     sum_update_frame_time,
