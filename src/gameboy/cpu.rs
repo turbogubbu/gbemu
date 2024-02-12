@@ -65,7 +65,7 @@ impl Cpu {
             instruction.opcode, opcode
         );
         self.execute_instruction(instruction, mem);
-        self.increment_pc(&instruction.op_type, instruction.bytes);
+        self.increment_pc(instruction.bytes);
         self.set_flags(&instruction.flags);
 
         self.draw_line = if ((self.get_uptime() % 456) + instruction.cycles as u64) > 456 {
@@ -112,7 +112,6 @@ impl Cpu {
 
         // Check if any interrupt is enbaled
         let interrupt_enable = mem.read_mem(0xffff);
-
         if interrupt_enable == 0x00 {
             return;
         }
@@ -228,7 +227,7 @@ impl Cpu {
         }
     }
 
-    fn increment_pc(&mut self, _optype: &instructions::OpType, value: u8) {
+    fn increment_pc(&mut self, value: u8) {
         // For now just increase pc, jmp and call instructions need special treatment!
         self.registers.pc += value as u16;
     }
@@ -1008,7 +1007,7 @@ impl Cpu {
         }
     }
 
-    fn srl(&mut self, instruction: &Instruction, mem: &Memory) {
+    fn srl(&mut self, instruction: &Instruction, _mem: &Memory) {
         match &instruction.dst {
             instructions::Addressing::Register(reg) => {
                 if self.registers.get_reg_val(*reg) & 0x01 == 0x01 {

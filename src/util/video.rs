@@ -1,17 +1,15 @@
 extern crate sdl2;
 
 use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
-use crate::gameboy::joypad_input::{self, JoypadInput};
+use crate::gameboy::joypad_input::JoypadInput;
 use crate::gameboy::ppu::Tile;
 
 use std::process::exit;
 
-use log::debug;
-
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::{Point, Rect};
+use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use sdl2::surface::Surface;
 use sdl2::ttf::Sdl2TtfContext;

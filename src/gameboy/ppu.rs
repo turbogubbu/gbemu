@@ -1,7 +1,7 @@
-use crate::gameboy::display::{Display, DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
+use crate::gameboy::display::{DIMENSIONS, DIMENSIONS_X, DIMENSIONS_Y};
 use crate::gameboy::memory::Memory;
 
-use core::arch::x86_64::_rdtsc;
+// use core::arch::x86_64::_rdtsc;
 
 #[derive(Debug)]
 pub struct Ppu {}
@@ -123,7 +123,17 @@ impl Ppu {
                 let pos = sprite.x_pos as i16 - 8;
                 let y = self.get_lcd_y(mem) - sprite.y_pos;
                 let tile = self.get_tile(mem, sprite.index);
-                let sprite_pixels: [u8; 0x8] = core::array::from_fn(|m| tile.get_pixel(m as u8, y));
+                let tile2 = self.get_tile(mem, sprite.index + 1); // Second tile if it's a 8*16
+                                                                  // sprite
+                let sprite_pixels: [u8; 0x8];
+                // This checks if the sprite is a 8*16 pixel object, if so, when the y coordinate
+                // is >= 8 the pixel data should be fetched from the second tile of the big sprite
+                if lcd_control.obj_size && y >= 8 {
+                    // panic!("obj_size = 1 is not implemented yet!\n");
+                    sprite_pixels = core::array::from_fn(|m| tile2.get_pixel(m as u8, y - 8));
+                } else {
+                    sprite_pixels = core::array::from_fn(|m| tile.get_pixel(m as u8, y));
+                }
 
                 for i in 0..8 {
                     if (pos + i) < 0 {
@@ -202,6 +212,36 @@ impl OAM {
             flags,
         }
     }
+
+    #[allow(dead_code)]
+    pub fn get_priority(&mut self) -> bool {
+        self.flags & 0x80 == 0x80
+    }
+
+    #[allow(dead_code)]
+    pub fn get_yflip(&mut self) -> bool {
+        self.flags & 0x40 == 0x40
+    }
+
+    #[allow(dead_code)]
+    pub fn get_xflip(&mut self) -> bool {
+        self.flags & 0x20 == 0x20
+    }
+
+    #[allow(dead_code)]
+    pub fn get_dmgpalette(&mut self) -> bool {
+        self.flags & 0x10 == 0x10
+    }
+
+    #[allow(dead_code)]
+    pub fn get_bank(&mut self) -> bool {
+        self.flags & 0x08 == 0x08
+    }
+
+    #[allow(dead_code)]
+    pub fn get_cgbpalette(&mut self) -> u8 {
+        self.flags & 0x03
+    }
 }
 
 #[derive(Debug)]
@@ -217,7 +257,7 @@ impl Tile {
     }
 
     pub fn get_pixel(&self, x: u8, y: u8) -> u8 {
-        assert!(x < 8 && y < 8);
+        assert!(x < 8 && y < 8, "x: {}, y: {}", x, y);
         let lsbyte: u8 = self.0[y as usize * 2];
         let msbyte: u8 = self.0[y as usize * 2 + 1];
         let lsbit: bool = if (lsbyte & (1 << (7 - x))) > 0 {
@@ -234,13 +274,14 @@ impl Tile {
     }
 }
 
-#[derive(Debug)]
+/*#[derive(Debug)]
 struct TileMap {
     tile_indexes: [u8; 32 * 32],
 }
 
-impl TileMap {}
+impl TileMap {}*/
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct LcdControl {
     pub enable: bool,
