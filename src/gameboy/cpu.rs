@@ -580,45 +580,23 @@ impl Cpu {
 
     // Decrement 8bit
     fn dec8(&mut self, instruction: &Instruction, mem: &mut Memory) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if (((*self.registers.get_reg_ref(*reg) & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
-                    self.registers.set_flag(Flag::HalfCarry);
-                } else {
-                    self.registers.reset_flag(Flag::HalfCarry);
-                }
+        let mut dst = self.get_value8(&instruction.dst, mem);
 
-                *self.registers.get_reg_ref(*reg) =
-                    (*self.registers.get_reg_ref(*reg)).wrapping_sub(1);
-
-                if *self.registers.get_reg_ref(*reg) == 0 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            instructions::Addressing::RelativeRegister(reg) => match reg {
-                instructions::Registers::HL => {
-                    let val = self.get_value8(&instruction.dst, mem);
-
-                    if (((val & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
-                        self.registers.set_flag(Flag::HalfCarry);
-                    } else {
-                        self.registers.reset_flag(Flag::HalfCarry);
-                    }
-
-                    self.store_value8(&instruction.dst, mem, val.wrapping_sub(1));
-
-                    if val.wrapping_sub(1) == 0 {
-                        self.registers.set_flag(Flag::Zero);
-                    } else {
-                        self.registers.reset_flag(Flag::Zero);
-                    }
-                }
-                _ => panic!("Dec8 not implemted for this relative register!\n"),
-            },
-            _ => panic!("Dec8 not implemented for this addressing"),
+        if (((dst & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
         }
+
+        dst = dst.wrapping_sub(1);
+
+        if dst == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, dst);
     }
 
     // Implementation of call
@@ -1022,14 +1000,6 @@ impl Cpu {
         dst = src.wrapping_add(dst);
 
         self.store_value16(&instruction.dst, dst);
-
-        debug!(
-            "Add 16 with source: {:?} (val: 0x{:02x}) and destination {:?}(val: 0x{:02x})",
-            instruction.src,
-            src,
-            instruction.dst,
-            self.get_value16(&instruction.dst, mem)
-        );
     }
 
     // Reset
