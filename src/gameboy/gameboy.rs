@@ -57,15 +57,25 @@ impl Gameboy {
         let mut loop_count: u64 = 0;
 
         let mut sum_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_handle_instruction_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_handle_interrupt_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_handle_boot_image_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_handle_ppu: u64 = 0;
+        #[allow(unused)]
         let mut sum_handle_event: u64 = 0;
+        #[allow(unused)]
         let mut sum_misc_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_draw_line_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_update_frame_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_draw_text_time: u64 = 0;
+        #[allow(unused)]
         let mut sum_draw_display_time: u64 = 0;
 
         loop {

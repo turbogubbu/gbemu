@@ -57,6 +57,7 @@ pub enum OpType {
     Set,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum FlagsEnum {
     Zero,
@@ -81,6 +82,7 @@ pub enum Addressing {
     RstAddr(u16),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Copy, Clone)]
 pub enum Registers {
     A,

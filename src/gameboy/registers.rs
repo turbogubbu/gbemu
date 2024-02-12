@@ -67,6 +67,7 @@ impl Registers {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_af(&self) -> u16 {
         ((self.a as u16) << 8) | (self.f as u16)
     }
@@ -350,9 +351,5 @@ impl Registers {
                 panic!("Register not implemented to reset bit!");
             }
         };
-    }
-
-    pub fn adc_reg(&mut self, reg: &instructions::Registers) {
-        let val: &mut u8 = self.get_reg_ref(*reg);
     }
 }
