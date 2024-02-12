@@ -424,22 +424,9 @@ impl Cpu {
 
     // Xor
     fn xor(&mut self, instruction: &Instruction, mem: &Memory) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => match reg {
-                instructions::Registers::A => self.registers.a ^= self.registers.a,
-                instructions::Registers::B => self.registers.a ^= self.registers.b,
-                instructions::Registers::C => self.registers.a ^= self.registers.c,
-                instructions::Registers::D => self.registers.a ^= self.registers.d,
-                instructions::Registers::E => self.registers.a ^= self.registers.e,
-                instructions::Registers::H => self.registers.a ^= self.registers.h,
-                instructions::Registers::L => self.registers.a ^= self.registers.l,
-                _ => panic!("Addressing of register for xor not possible"),
-            },
-            instructions::Addressing::Immediate8 => {
-                self.registers.a ^= mem.read_mem(self.registers.pc + 1);
-            }
-            _ => panic!("Addressing mode for xor not implemented yet"),
-        }
+        let val = self.get_value8(&instruction.dst, mem);
+
+        self.registers.a ^= val;
 
         self.registers.reset_flag(Flag::Carry);
         self.registers.reset_flag(Flag::HalfCarry);
