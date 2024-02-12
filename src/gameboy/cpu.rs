@@ -537,45 +537,23 @@ impl Cpu {
 
     // Increment 8bit
     fn inc8(&mut self, instruction: &Instruction, mem: &mut Memory) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if (((*self.registers.get_reg_ref(*reg) & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
-                    self.registers.set_flag(Flag::HalfCarry);
-                } else {
-                    self.registers.reset_flag(Flag::HalfCarry);
-                }
+        let mut dst = self.get_value8(&instruction.dst, mem);
 
-                *self.registers.get_reg_ref(*reg) =
-                    (*self.registers.get_reg_ref(*reg)).wrapping_add(1);
-
-                if *self.registers.get_reg_ref(*reg) == 0 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            instructions::Addressing::RelativeRegister(reg) => match reg {
-                instructions::Registers::HL => {
-                    let val = self.get_value8(&instruction.dst, mem);
-
-                    if (((val & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
-                        self.registers.set_flag(Flag::HalfCarry);
-                    } else {
-                        self.registers.reset_flag(Flag::HalfCarry);
-                    }
-
-                    self.store_value8(&instruction.dst, mem, val.wrapping_add(1));
-
-                    if val.wrapping_add(1) == 0 {
-                        self.registers.set_flag(Flag::Zero);
-                    } else {
-                        self.registers.reset_flag(Flag::Zero);
-                    }
-                }
-                _ => panic!("inc8 not implemted for this relative register!\n"),
-            },
-            _ => panic!("Inc8 not implemented for this addressing"),
+        if (((dst & 0xf) + (1 & 0xf)) & 0x10) == 0x10 {
+            self.registers.set_flag(Flag::HalfCarry);
+        } else {
+            self.registers.reset_flag(Flag::HalfCarry);
         }
+
+        dst = dst.wrapping_add(1);
+
+        if dst == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, dst);
     }
 
     // Decrement 8bit
