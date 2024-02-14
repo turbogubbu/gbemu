@@ -32,7 +32,7 @@ impl Gameboy {
 
     pub fn init(&mut self) {
         self.memory
-            .load_rom(fs::read("roms/tests/08-misc instrs.gb").unwrap());
+            .load_rom(fs::read("roms/tests/09-op r,r.gb").unwrap());
         // for gameboy doctor
         self.memory.data[0xff44] = 0x90;
         /*self.cpu

@@ -251,6 +251,12 @@ impl Cpu {
             instructions::OpType::SBC => self.sbc(instruction, mem),
             instructions::OpType::RR => self.rr(instruction, mem),
             instructions::OpType::RRA => self.rra(instruction),
+            instructions::OpType::RRCA => self.rrca(),
+            instructions::OpType::RLC => self.rlc(instruction, mem),
+            instructions::OpType::SCF => self.scf(),
+            instructions::OpType::CCF => self.ccf(),
+            instructions::OpType::RRC => self.rrc(instruction, mem),
+            instructions::OpType::SRA => self.sra(instruction, mem),
             instructions::OpType::Nop => return,
             instructions::OpType::Halt => {
                 /*println!(
@@ -862,7 +868,9 @@ impl Cpu {
             }
         }
 
-        if val > self.registers.a {
+        let diff: i16 = self.registers.a as i16 - val as i16;
+
+        if diff < 0 {
             self.registers.set_flag(Flag::Carry);
         } else {
             self.registers.reset_flag(Flag::Carry);
@@ -875,9 +883,9 @@ impl Cpu {
             self.registers.reset_flag(Flag::HalfCarry);
         }
 
-        let res = self.registers.a.wrapping_sub(val);
+        // let res = self.registers.a.wrapping_sub(val);
 
-        if res == 0 {
+        if diff == 0 {
             self.registers.set_flag(Flag::Zero);
         } else {
             self.registers.reset_flag(Flag::Zero);
@@ -1038,6 +1046,13 @@ impl Cpu {
     fn swap(&mut self, instruction: &Instruction, mem: &mut Memory) {
         let mut val = self.get_value8(&instruction.dst, mem);
         val = ((val & 0x0f) << 4) | ((val & 0xf0) >> 4);
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
         self.store_value8(&instruction.dst, mem, val);
     }
 
@@ -1286,5 +1301,116 @@ impl Cpu {
         }
 
         self.store_value8(&instruction.dst, mem, (diff & 0x00ff) as u8);
+    }
+
+    // Set carry flag
+    fn scf(&mut self) {
+        // done with flags
+    }
+
+    // Complement carry flag
+    fn ccf(&mut self) {
+        if self.registers.get_flag(Flag::Carry) {
+            self.registers.reset_flag(Flag::Carry);
+        } else {
+            self.registers.set_flag(Flag::Carry);
+        }
+    }
+
+    // rotate right register a
+    fn rrca(&mut self) {
+        let lsb = self.registers.a & 0x01 == 0x01;
+        if lsb {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        self.registers.a >>= 1;
+
+        if lsb {
+            self.registers.a |= 0x80;
+        }
+    }
+
+    // rotate left with carry
+    fn rlc(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
+
+        let msb = val & 0x80 == 0x80;
+
+        if msb {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        val <<= 1;
+
+        if msb {
+            val |= 0x01;
+        }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
+    }
+
+    // rotate right with carry
+    fn rrc(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
+
+        let lsb = val & 0x01 == 0x01;
+
+        if lsb {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        val >>= 1;
+
+        if lsb {
+            val |= 0x80;
+        }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
+    }
+
+    // Shift right arithmetically
+    fn sra(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
+
+        if val & 0x01 == 0x01 {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        let msb = val & 0x80 == 0x80;
+
+        val >>= 1;
+
+        if msb {
+            val |= 0x80;
+        }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
     }
 }
