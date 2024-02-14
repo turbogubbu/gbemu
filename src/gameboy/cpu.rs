@@ -346,6 +346,10 @@ impl Cpu {
                 instructions::Registers::SP => self.registers.sp,
                 _ => panic!("Must be double reg!"),
             },
+            instructions::Addressing::RelativeAddress8 => {
+                let immediate = mem.read_mem(self.registers.pc + 1) as i8;
+                (self.registers.sp as i32 + immediate as i32) as u16
+            }
             _ => panic!("Addressing mode for getValue16 not implemented yet"),
         }
     }
@@ -411,12 +415,12 @@ impl Cpu {
                 mem.read_mem(0xff00 + immediate)
             }
             instructions::Addressing::RelativeAddress16 => {
-                /*println!(
+                println!(
                     "Read from relative address 0x{:04x}: 0x{:02x}",
                     self.get_value16_immediate(mem),
                     mem.read_mem(self.get_value16_immediate(mem))
-                );*/
-                assert!(mem.read_mem(self.get_value16_immediate(mem)) != 0x0b);
+                );
+                // assert!(mem.read_mem(self.get_value16_immediate(mem)) != 0x0b);
                 mem.read_mem(self.get_value16_immediate(mem))
             }
             _ => {
@@ -480,6 +484,26 @@ impl Cpu {
     // Load 16bit value
     fn load16(&mut self, instruction: &Instruction, mem: &mut Memory) {
         // println!("Load 16 opcode: 0x{:02x}", instruction.opcode);
+        match &instruction.src {
+            // this is for the flags when storing  sp+e8 into hl
+            instructions::Addressing::RelativeAddress8 => {
+                let sp = self.registers.sp as i32;
+                let imm = mem.read_mem(self.registers.pc + 1) as i8;
+
+                if ((sp & 0x0f) + (imm as i32 & 0x0f)) > 0x0f {
+                    self.registers.set_flag(Flag::HalfCarry);
+                } else {
+                    self.registers.reset_flag(Flag::HalfCarry);
+                }
+
+                if ((sp & 0xff) + (imm as i32 & 0xff)) > 0xff {
+                    self.registers.set_flag(Flag::Carry);
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
+                }
+            }
+            _ => {}
+        }
         self.store_value16(
             &instruction.dst,
             self.get_value16(&instruction.src, mem),
@@ -489,6 +513,10 @@ impl Cpu {
 
     // Load 8bit value
     fn load8(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        /*if instruction.opcode == 0xfa {
+            println!("LD a, (a16) @ pc: 0x{:04x}", self.registers.pc);
+        }*/
+
         let val = self.get_value8(&instruction.src, mem);
         self.store_value8(&instruction.dst, mem, val);
     }
@@ -541,7 +569,7 @@ impl Cpu {
             instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
                 match &instruction.dst {
                     instructions::Addressing::Bit(bit) => {
-                        set = (mem.data[self.registers.get_hl() as usize] & (1 << bit)) > 0;
+                        set = (mem.read_mem(self.registers.get_hl()) & (1 << bit)) > 0;
                     }
                     _ => panic!("Destination of bit() function must be a bit!"),
                 }
@@ -1102,24 +1130,50 @@ impl Cpu {
 
     // Add 16 bit values
     fn add16(&mut self, instruction: &Instruction, mem: &mut Memory) {
-        let src = self.get_value16(&instruction.src, mem);
-        let mut dst = self.get_value16(&instruction.dst, mem);
+        match &instruction.src {
+            instructions::Addressing::RelativeAddress8 => {
+                let signed: i8 = mem.read_mem(self.registers.pc + 1) as i8;
 
-        if (dst as u32 + src as u32) > u16::MAX as u32 {
-            self.registers.set_flag(Flag::Carry);
-        } else {
-            self.registers.reset_flag(Flag::Carry);
+                if ((self.registers.sp as i32 & 0xf) + (signed as i32 & 0xf)) > 0xf {
+                    self.registers.set_flag(Flag::HalfCarry);
+                } else {
+                    self.registers.reset_flag(Flag::HalfCarry);
+                }
+
+                if ((self.registers.sp as i32 & 0xff) + (signed as i32 & 0xff)) > 0xff {
+                    self.registers.set_flag(Flag::Carry);
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
+                }
+
+                if signed < 0 {
+                    self.registers.sp = self.registers.sp.wrapping_sub(signed.abs() as u16);
+                } else {
+                    self.registers.sp = self.registers.sp.wrapping_add(signed.abs() as u16);
+                }
+            }
+            instructions::Addressing::Register(_) => {
+                let src = self.get_value16(&instruction.src, mem);
+                let mut dst = self.get_value16(&instruction.dst, mem);
+
+                if (dst as u32 + src as u32) > u16::MAX as u32 {
+                    self.registers.set_flag(Flag::Carry);
+                } else {
+                    self.registers.reset_flag(Flag::Carry);
+                }
+
+                if ((src as u32 & 0xfff) + (dst as u32 & 0xfff)) > 0xfff {
+                    self.registers.set_flag(Flag::HalfCarry);
+                } else {
+                    self.registers.reset_flag(Flag::HalfCarry);
+                }
+
+                dst = src.wrapping_add(dst);
+
+                self.store_value16(&instruction.dst, dst, mem);
+            }
+            _ => panic!("Add 16 not implemented for src {:?}", &instruction.src),
         }
-
-        if ((src as u32 & 0xfff) + (dst as u32 & 0xfff)) > 0xfff {
-            self.registers.set_flag(Flag::HalfCarry);
-        } else {
-            self.registers.reset_flag(Flag::HalfCarry);
-        }
-
-        dst = src.wrapping_add(dst);
-
-        self.store_value16(&instruction.dst, dst, mem);
     }
 
     // Reset
@@ -1132,7 +1186,8 @@ impl Cpu {
             instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
                 match &instruction.dst {
                     instructions::Addressing::Bit(bit) => {
-                        mem.data[self.registers.get_hl() as usize] &= !(1 << bit);
+                        let val = mem.read_mem(self.registers.get_hl()) & !(1 << bit);
+                        mem.write_mem(self.registers.get_hl(), val);
                     }
                     _ => panic!("Destination of bit() function must be a bit!"),
                 }
@@ -1240,7 +1295,9 @@ impl Cpu {
             instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
                 match &instruction.dst {
                     instructions::Addressing::Bit(bit) => {
-                        mem.data[self.registers.get_hl() as usize] |= 1 << bit;
+                        let val = mem.read_mem(self.registers.get_hl()) | (1 << bit);
+                        mem.write_mem(self.registers.get_hl(), val);
+                        // mem.data[self.registers.get_hl() as usize] |= 1 << bit;
                     }
                     _ => panic!("Destination of bit() function must be a bit!"),
                 }

@@ -244,9 +244,9 @@ impl Registers {
                 }
             }
             instructions::Registers::SP => {
-                self.sp -= 1;
+                self.sp = self.sp.wrapping_sub(1);
             }
-            _ => assert!(false, "Dec 16 of register not available"),
+            _ => panic!("Dec 16 of register {:?} not available", reg),
         }
     }
 
@@ -277,7 +277,7 @@ impl Registers {
                 }
             }
             instructions::Registers::SP => {
-                self.sp += 1;
+                self.sp = self.sp.wrapping_add(1);
             }
             _ => assert!(false, "Dec 16 of register not available"),
         }
