@@ -56,6 +56,21 @@ impl Registers {
         }
     }
 
+    pub fn new_after_boot_rom() -> Registers {
+        Registers {
+            a: 0x01,
+            f: 0xb0,
+            b: 0x00,
+            c: 0x13,
+            d: 0x00,
+            e: 0xd8,
+            h: 0x01,
+            l: 0x4d,
+            sp: 0xfffe,
+            pc: 0x0100,
+        }
+    }
+
     pub fn store_16bit_reg(&mut self, reg: &instructions::Registers, value: u16) {
         match reg {
             instructions::Registers::AF => self.store_af(value),
@@ -239,7 +254,7 @@ impl Registers {
         match reg {
             instructions::Registers::BC => {
                 if self.c == 255 {
-                    self.b += 1;
+                    self.b = self.b.wrapping_add(1);
                     self.c = 0;
                 } else {
                     self.c += 1;
@@ -293,6 +308,22 @@ impl Registers {
         }
 
         if tmp & 0x80 != 0 {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn rr_reg(&mut self, reg: &instructions::Registers, carry: bool) -> bool {
+        let val: &mut u8 = self.get_reg_ref(*reg);
+        let tmp: u8 = *val;
+        *val >>= 1;
+
+        if carry {
+            *val |= 0x80;
+        }
+
+        if tmp & 0x01 != 0 {
             true
         } else {
             false

@@ -49,10 +49,10 @@ impl Memory {
         if self.data[0x147] == 0x00 {
             self.cartridge_type = CartridgeType::RomOnly;
         } else {
-            panic!(
+            /*panic!(
                 "Cartridge type is not ROM only! (it is: 0x{:02x})\n",
                 self.data[0x147]
-            );
+            );*/
         }
 
         // This sets all buttons to not pressed!
