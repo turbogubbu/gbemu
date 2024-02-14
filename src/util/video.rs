@@ -58,17 +58,22 @@ impl Video {
         self.canvas.draw_rect(rect).unwrap();
     }
 
-    pub fn draw_single_tile(&mut self, mem: &[u8; 0x10000], index: u8, pos_x: i32, pos_y: i32) {
-        let pixels = Tile::new(core::array::from_fn(|n| {
-            mem[0x8000 + index as usize * 16 + n]
-        }))
-        .get_pixels();
+    pub fn draw_single_tile(&mut self, mem: &[u8; 0x10000], index: usize, pos_x: i32, pos_y: i32) {
+        // get pixels of the tile
+        let pixels = Tile::new(core::array::from_fn(|n| mem[0x8000 + index * 16 + n])).get_pixels();
 
-        for n in 0..64 {
-            let x = pos_x + (n as i32 % 8) * PIXEL as i32;
-            let y = pos_y + (n as i32 / 8) * PIXEL as i32;
-            self.draw_pixel(x, y, pixels[n]);
+        // create bitmap of tile
+        let mut bitmap: [u8; 8 * 8 * 3] = [0; 8 * 8 * 3];
+        for (i, pixel) in pixels.iter().enumerate() {
+            bitmap[3 * i + 0] = 155 - pixel * 41;
+            bitmap[3 * i + 1] = 188 - pixel * 62;
+            bitmap[3 * i + 2] = 15 - pixel * 5;
         }
+
+        let surface2 =
+            Surface::from_data(&mut bitmap, 8u32, 8u32, 8 * 3u32, PixelFormatEnum::RGB24).unwrap();
+
+        self.draw_surface(&surface2, pos_x, pos_y, 2);
     }
 
     pub fn draw_vram_tiles(&mut self, mem: &[u8; 0x10000]) {
@@ -76,10 +81,26 @@ impl Video {
             let base_x = WIDTH as i32 - 8 * 8 * PIXEL as i32 + (i as i32 % 8) * 8 * PIXEL as i32;
             let base_y = (i as i32 / 8) * 8 * PIXEL as i32;
 
-            self.draw_single_tile(mem, i as u8, base_x, base_y);
+            self.draw_single_tile(mem, i, base_x, base_y);
         }
 
         // self.canvas.present();
+    }
+
+    pub fn draw_tile_maps(&mut self, mem: &[u8; 0x10000]) {
+        for row in 0..32 {
+            for column in 0..32 {
+                let base_x = WIDTH as i32 - 8 * 32 as i32 + column * 8;
+                let base_y = 800i32 + row * 8;
+
+                self.draw_single_tile(
+                    mem,
+                    256 + row as usize * 32 + column as usize,
+                    base_x,
+                    base_y,
+                );
+            }
+        }
     }
 
     pub fn write_smth(&mut self) {
