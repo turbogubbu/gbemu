@@ -85,6 +85,10 @@ impl Memory {
             return;
         }
 
+        if address == 0xdef6 {
+            println!("Wrote to 0xdef6 with value 0x{:02x}", value);
+        }
+
         self.data[address as usize] = value;
     }
 
