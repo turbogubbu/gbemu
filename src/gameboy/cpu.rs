@@ -283,7 +283,7 @@ impl Cpu {
 
     fn increment_pc(&mut self, value: u8) {
         // For now just increase pc, jmp and call instructions need special treatment!
-        self.registers.pc += value as u16;
+        self.registers.pc = self.registers.pc.wrapping_add(value as u16);
     }
 
     fn set_flags(&mut self, flags: &instructions::Flags) {
@@ -344,10 +344,23 @@ impl Cpu {
     }
 
     // Store 16bit value
-    fn store_value16(&mut self, addressing: &instructions::Addressing, value: u16) {
+    fn store_value16(
+        &mut self,
+        addressing: &instructions::Addressing,
+        value: u16,
+        mem: &mut Memory,
+    ) {
         match addressing {
             instructions::Addressing::Register(reg) => self.registers.store_16bit_reg(reg, value),
-            _ => panic!("Addressing mode for store_value16 not implemented yet"),
+            instructions::Addressing::RelativeAddress16 => {
+                let address = self.get_value16_immediate(mem);
+                mem.write_mem(address, (value & 0xff) as u8);
+                mem.write_mem(address + 1, (value >> 8) as u8);
+            }
+            _ => panic!(
+                "Addressing mode for store_value16 not implemented yet, addressing: {:?}",
+                addressing
+            ),
         }
     }
 
@@ -450,7 +463,12 @@ impl Cpu {
 
     // Load 16bit value
     fn load16(&mut self, instruction: &Instruction, mem: &mut Memory) {
-        self.store_value16(&instruction.dst, self.get_value16(&instruction.src, mem));
+        // println!("Load 16 opcode: 0x{:02x}", instruction.opcode);
+        self.store_value16(
+            &instruction.dst,
+            self.get_value16(&instruction.src, mem),
+            mem,
+        );
     }
 
     // Load 8bit value
@@ -641,6 +659,27 @@ impl Cpu {
                         self.uptime += 12;
                     }
                 }
+                instructions::FlagsEnum::Zero => {
+                    if !self.registers.get_flag(Flag::Zero) {
+                        return;
+                    } else {
+                        self.uptime += 12;
+                    }
+                }
+                instructions::FlagsEnum::NonCarry => {
+                    if self.registers.get_flag(Flag::Carry) {
+                        return;
+                    } else {
+                        self.uptime += 12;
+                    }
+                }
+                instructions::FlagsEnum::Carry => {
+                    if !self.registers.get_flag(Flag::Carry) {
+                        return;
+                    } else {
+                        self.uptime += 12;
+                    }
+                }
                 _ => panic!("Flag not implemented for call!"),
             },
             _ => {}
@@ -716,7 +755,7 @@ impl Cpu {
         self.ime = true;
         self.exec_ret(mem, instruction.bytes as u16);
         // TODO: somehow smth is wrong with the call / return stuff...
-        self.registers.pc -= 3;
+        // self.registers.pc -= 1;
     }
 
     // Push values to stack
@@ -927,6 +966,16 @@ impl Cpu {
                         return;
                     }
                 }
+                instructions::FlagsEnum::NonCarry => {
+                    if self.registers.get_flag(registers::Flag::Carry) {
+                        return;
+                    }
+                }
+                instructions::FlagsEnum::Carry => {
+                    if !self.registers.get_flag(registers::Flag::Carry) {
+                        return;
+                    }
+                }
                 _ => panic!("Flag not implemented for jump instruction!\n"),
             },
             _ => panic!("Destination not implemented for jump"),
@@ -1010,7 +1059,7 @@ impl Cpu {
             ((self.registers.pc + instruction.bytes as u16) >> 8) as u8,
         );
         // -1 for instruction size
-        self.registers.pc = target - instruction.bytes as u16;
+        self.registers.pc = target.wrapping_sub(instruction.bytes as u16);
 
         // self.registers.sp -= 2;
         // self.write_mem(mem, self.registers.sp, (self.registers.pc & 0xff) as u8);
@@ -1038,7 +1087,7 @@ impl Cpu {
 
         dst = src.wrapping_add(dst);
 
-        self.store_value16(&instruction.dst, dst);
+        self.store_value16(&instruction.dst, dst, mem);
     }
 
     // Reset
