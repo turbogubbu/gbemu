@@ -80,9 +80,22 @@ impl Memory {
         }
     }
 
+    fn oam_dma(&mut self, start_addr: u8) {
+        let real_start_address: usize = (start_addr as usize) << 8;
+
+        for i in 0..0xa0 {
+            self.data[0xfE00 + i] = self.data[real_start_address + i];
+        }
+    }
+
     pub fn write_mem(&mut self, address: u16, value: u8) {
         if self.cartridge_type == CartridgeType::RomOnly && address <= 0x3fff {
             return;
+        }
+
+        if address == 0xfe46 {
+            println!("OAM DMA transfer started!\n");
+            self.oam_dma(value);
         }
 
         self.data[address as usize] = value;

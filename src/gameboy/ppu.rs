@@ -96,11 +96,13 @@ impl Ppu {
     /// \param x, x pos on the tile map
     /// \param y, y pos on the thile map
     /// \retval index of the tile
-    fn get_tile_map_index(&self, mem: &Memory, x: u8, y: u8) -> u8 {
+    fn get_tile_map_index(&self, mem: &Memory, x: u8, y: u8, tile_map_area: bool) -> u8 {
         assert!(x < 32 && y < 32);
-        let lcd_c = LcdControl::new(self.get_lcd_control(mem));
+        // let lcd_c = LcdControl::new(self.get_lcd_control(mem));
 
-        if lcd_c.tile_map_area {
+        // println!("lc control: 0b{:08b}", self.get_lcd_control(mem));
+
+        if tile_map_area {
             mem.data[0x9c00 + x as usize + y as usize * 32]
         } else {
             mem.data[0x9800 + x as usize + y as usize * 32]
@@ -111,6 +113,8 @@ impl Ppu {
         let lcd_control = LcdControl::new(self.get_lcd_control(mem));
         let mut oam_fifo = [0; DIMENSIONS_X];
         let mut bg_fifo = [0; DIMENSIONS_X];
+
+        // println!("lcd_control: 0b{:08b}", self.get_lcd_control(mem));
 
         let scx = self.get_scx(mem);
         let scy = self.get_scy(mem);
@@ -123,8 +127,12 @@ impl Ppu {
         }
 
         if lcd_control.obj_enable {
+            // println!("checking objects, size of sprites: {}", sprites.len());
             for sprite in sprites {
-                let pos = sprite.x_pos as i16 - 8;
+                println!("Oam entry: {:?}", sprite);
+
+                let pos = (sprite.x_pos as i8) as i16 - 8;
+                // println!("pos: {}", pos);
                 let y = self.get_lcd_y(mem) - sprite.y_pos;
                 let tile = self.get_tile(mem, sprite.index);
                 let tile2 = self.get_tile(mem, sprite.index + 1); // Second tile if it's a 8*16
@@ -141,9 +149,11 @@ impl Ppu {
 
                 for i in 0..8 {
                     if (pos + i) < 0 {
+                        // println!("skipping");
                         continue;
                     } else {
-                        oam_fifo[(pos + i) as usize] = sprite_pixels[i as usize];
+                        // oam_fifo[(pos + i) as usize] = sprite_pixels[i as usize];
+                        // panic!("writing pixel of sprite {}", sprite_pixels[i as usize]);
                     }
                 }
             }
@@ -157,7 +167,8 @@ impl Ppu {
             // good reference for ppu processing: http://pixelbits.16-b.it/GBEDG/ppu/#a-word-of-warning
             let index_x = ((scx + i) / 8) & 0x1f;
             let index_y = ((ly as u16 + scy as u16) & 0xff) as u8 / 8;
-            let map_index = self.get_tile_map_index(mem, index_x, index_y);
+            let map_index =
+                self.get_tile_map_index(mem, index_x, index_y, lcd_control.bg_tile_map_area);
             let tile = self.get_tile(mem, map_index);
             let y_tile = scy.wrapping_add(ly) % 8;
             let x_tile = scx.wrapping_add(i) % 8;
@@ -177,6 +188,23 @@ impl Ppu {
             // reg_a = 00111011 -> carry is 1
 
             bg_fifo[i as usize] = tile.get_pixel(x_tile, y_tile);
+
+            if lcd_control.window_enable {
+                let window_map_index = self.get_tile_map_index(
+                    mem,
+                    index_x,
+                    index_y,
+                    lcd_control.window_tile_map_area,
+                );
+
+                println!("in here");
+
+                let window_tile = self.get_tile(mem, window_map_index);
+
+                let window_pixel = window_tile.get_pixel(x_tile, y_tile);
+
+                bg_fifo[i as usize] = window_pixel;
+            }
         }
 
         for i in 0..160 {
@@ -289,9 +317,9 @@ impl TileMap {}*/
 #[derive(Debug)]
 struct LcdControl {
     pub enable: bool,
-    pub tile_map_area: bool,
+    pub window_tile_map_area: bool,
     pub window_enable: bool,
-    pub bg_window_tile_area: bool,
+    pub bg_window_tile_data_area: bool,
     pub bg_tile_map_area: bool,
     pub obj_size: bool,
     pub obj_enable: bool,
@@ -302,9 +330,9 @@ impl LcdControl {
     fn new(byte: u8) -> LcdControl {
         LcdControl {
             enable: (byte & 0x80) > 0,
-            tile_map_area: (byte & 0x40) > 0,
+            window_tile_map_area: (byte & 0x40) > 0,
             window_enable: (byte & 0x20) > 0,
-            bg_window_tile_area: (byte & 0x10) > 0,
+            bg_window_tile_data_area: (byte & 0x10) > 0,
             bg_tile_map_area: (byte & 0x08) > 0,
             obj_size: (byte & 0x04) > 0,
             obj_enable: (byte & 0x02) > 0,
