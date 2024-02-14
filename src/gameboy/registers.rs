@@ -221,7 +221,7 @@ impl Registers {
         match reg {
             instructions::Registers::BC => {
                 if self.c == 0 {
-                    self.b -= 1;
+                    self.b = self.b.wrapping_sub(1);
                     self.c = 255;
                 } else {
                     self.c -= 1;
@@ -229,7 +229,7 @@ impl Registers {
             }
             instructions::Registers::DE => {
                 if self.e == 0 {
-                    self.d -= 1;
+                    self.d = self.d.wrapping_sub(1);
                     self.e = 255;
                 } else {
                     self.e -= 1;
@@ -237,7 +237,7 @@ impl Registers {
             }
             instructions::Registers::HL => {
                 if self.l == 0 {
-                    self.h -= 1;
+                    self.h = self.h.wrapping_sub(1);
                     self.l = 255;
                 } else {
                     self.l -= 1;
@@ -262,7 +262,7 @@ impl Registers {
             }
             instructions::Registers::DE => {
                 if self.e == 255 {
-                    self.d += 1;
+                    self.d = self.d.wrapping_add(1);
                     self.e = 0;
                 } else {
                     self.e += 1;
@@ -270,7 +270,7 @@ impl Registers {
             }
             instructions::Registers::HL => {
                 if self.l == 255 {
-                    self.h += 1;
+                    self.h = self.h.wrapping_add(1);
                     self.l = 0;
                 } else {
                     self.l += 1;
