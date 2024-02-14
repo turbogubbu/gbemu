@@ -289,6 +289,7 @@ impl Registers {
             instructions::Registers::B => self.b & (1 << bit) != 0,
             instructions::Registers::C => self.c & (1 << bit) != 0,
             instructions::Registers::D => self.d & (1 << bit) != 0,
+            instructions::Registers::E => self.e & (1 << bit) != 0,
             instructions::Registers::H => self.h & (1 << bit) != 0,
             instructions::Registers::L => self.l & (1 << bit) != 0,
             _ => {
@@ -362,6 +363,7 @@ impl Registers {
             instructions::Registers::B => self.b &= !(1 << bit),
             instructions::Registers::C => self.c &= !(1 << bit),
             instructions::Registers::D => self.d &= !(1 << bit),
+            instructions::Registers::E => self.e &= !(1 << bit),
             instructions::Registers::H => self.h &= !(1 << bit),
             instructions::Registers::L => self.l &= !(1 << bit),
             _ => {
@@ -376,6 +378,7 @@ impl Registers {
             instructions::Registers::B => self.b |= 1 << bit,
             instructions::Registers::C => self.c |= 1 << bit,
             instructions::Registers::D => self.d |= 1 << bit,
+            instructions::Registers::E => self.e |= 1 << bit,
             instructions::Registers::H => self.h |= 1 << bit,
             instructions::Registers::L => self.l |= 1 << bit,
             _ => {
