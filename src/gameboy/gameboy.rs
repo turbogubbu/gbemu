@@ -31,12 +31,11 @@ impl Gameboy {
     }
 
     pub fn init(&mut self) {
-        self.memory
-            .load_rom(fs::read("roms/tests/11-op a,(hl).gb").unwrap());
+        self.memory.load_rom(fs::read("roms/tetris.gb").unwrap());
         // for gameboy doctor
-        self.memory.data[0xff44] = 0x90;
-        /*self.cpu
-        .load_boot_rom(fs::read("roms/boot.gb").unwrap(), &mut self.memory);*/
+        // self.memory.data[0xff44] = 0x90;
+        self.cpu
+            .load_boot_rom(fs::read("roms/boot.gb").unwrap(), &mut self.memory);
         self.cpu.print_status();
         self.display.init(&self.memory.data);
     }
@@ -82,8 +81,10 @@ impl Gameboy {
         #[allow(unused)]
         let mut sum_draw_display_time: u64 = 0;
 
+        // For gameboy doc
+        /*
         let file = std::fs::File::create("log").unwrap();
-        let mut writer = BufWriter::new(&file);
+        let mut writer = BufWriter::new(&file);*/
 
         loop {
             // ----------------- Benchmarking ------------------- //
@@ -92,9 +93,10 @@ impl Gameboy {
             }
             // ----------------- Benchmarking ------------------- //
 
-            if !self.cpu.prefixed {
+            // For gameboy doc
+            /*if !self.cpu.prefixed {
                 self.cpu.log_state_to_file(&self.memory, &mut writer);
-            }
+            }*/
 
             self.cpu.execute_single_instruction(&mut self.memory);
             /*if self.cpu.prefixed {
@@ -115,13 +117,13 @@ impl Gameboy {
             }
             // ----------------- Benchmarking ------------------- //
 
-            /*if self.cpu.loading_boot_image {
+            if self.cpu.loading_boot_image {
                 //self.display.draw_vram_tiles(&self.memory.data);
                 self.video.draw_vram_tiles(&self.memory.data);
                 self.cpu.loading_boot_image = false;
-            }*/
+            }
 
-            /*if self.cpu.load_rom_boot_section {
+            if self.cpu.load_rom_boot_section {
                 // println!("boot section before loading new file");
                 // self.memory.print(0x0000, 0x100);
                 self.cpu
@@ -129,7 +131,7 @@ impl Gameboy {
                 // println!("boot section after loading new file");
                 // self.memory.print(0x0000, 0x100);
                 self.cpu.load_rom_boot_section = false;
-            }*/
+            }
 
             // ----------------- Benchmarking ------------------- //
             unsafe {

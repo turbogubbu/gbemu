@@ -23,8 +23,8 @@ impl Ppu {
 
     fn increment_lcd_y(&self, mem: &mut Memory) -> bool {
         // for gameboy doctor:
-        mem.data[0xff44] = 0x90;
-        return false;
+        /*mem.data[0xff44] = 0x90;
+        return false;*/
 
         mem.data[0xff44] += 1;
         mem.data[0xff44] %= 154;
