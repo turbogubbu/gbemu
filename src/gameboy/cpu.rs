@@ -806,7 +806,7 @@ impl Cpu {
                 }
                 instructions::Registers::AF => {
                     self.registers.a = mem.read_mem(self.registers.sp + 1);
-                    self.registers.f = mem.read_mem(self.registers.sp);
+                    self.registers.f = mem.read_mem(self.registers.sp) & 0xf0;
                 }
                 _ => panic!("Destination hast to be Double Register"),
             },
