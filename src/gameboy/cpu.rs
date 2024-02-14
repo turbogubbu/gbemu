@@ -30,7 +30,7 @@ pub struct Cpu {
 impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
-            registers: Registers::new_after_boot_rom(),
+            registers: Registers::new(),
             uptime: 0,
             ime: false,
             prefixed: false,
@@ -415,12 +415,6 @@ impl Cpu {
                 mem.read_mem(0xff00 + immediate)
             }
             instructions::Addressing::RelativeAddress16 => {
-                println!(
-                    "Read from relative address 0x{:04x}: 0x{:02x}",
-                    self.get_value16_immediate(mem),
-                    mem.read_mem(self.get_value16_immediate(mem))
-                );
-                // assert!(mem.read_mem(self.get_value16_immediate(mem)) != 0x0b);
                 mem.read_mem(self.get_value16_immediate(mem))
             }
             _ => {
