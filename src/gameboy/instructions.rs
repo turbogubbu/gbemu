@@ -5036,7 +5036,7 @@ pub const PREFIXED_INSTRUCTIONS: [Instruction; 256] = [
         },
         op_type: OpType::Bit,
         dst: Addressing::Bit(0),
-        src: Addressing::RelativeRegister(Registers::L),
+        src: Addressing::RelativeRegister(Registers::HL),
     },
     Instruction {
         opcode: 0x47,

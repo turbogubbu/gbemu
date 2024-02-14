@@ -227,8 +227,8 @@ impl Cpu {
             instructions::OpType::Ret => self.ret(instruction, mem),
             instructions::OpType::Push => self.push(instruction, mem),
             instructions::OpType::Pop => self.pop(instruction, mem),
-            instructions::OpType::RL => self.rl(instruction),
-            instructions::OpType::RLA => self.rla(instruction),
+            instructions::OpType::RL => self.rl(instruction, mem),
+            instructions::OpType::RLA => self.rla(instruction, mem),
             instructions::OpType::Cp => self.cp(instruction, mem),
             instructions::OpType::Sub8 => self.sub8(instruction, mem),
             instructions::OpType::Add8 => self.add8(instruction, mem),
@@ -244,7 +244,7 @@ impl Cpu {
             instructions::OpType::Res => self.res(instruction, mem),
             instructions::OpType::Set => self.set(instruction, mem),
             instructions::OpType::Reti => self.reti(instruction, mem),
-            instructions::OpType::SLA => self.sla(instruction),
+            instructions::OpType::SLA => self.sla(instruction, mem),
             instructions::OpType::SRL => self.srl(instruction, mem),
             instructions::OpType::RLCA => self.rlca(),
             instructions::OpType::ADC => self.adc(instruction, mem),
@@ -257,6 +257,7 @@ impl Cpu {
             instructions::OpType::CCF => self.ccf(),
             instructions::OpType::RRC => self.rrc(instruction, mem),
             instructions::OpType::SRA => self.sra(instruction, mem),
+            instructions::OpType::DAA => self.daa(),
             instructions::OpType::Nop => return,
             instructions::OpType::Halt => {
                 /*println!(
@@ -410,6 +411,12 @@ impl Cpu {
                 mem.read_mem(0xff00 + immediate)
             }
             instructions::Addressing::RelativeAddress16 => {
+                /*println!(
+                    "Read from relative address 0x{:04x}: 0x{:02x}",
+                    self.get_value16_immediate(mem),
+                    mem.read_mem(self.get_value16_immediate(mem))
+                );*/
+                assert!(mem.read_mem(self.get_value16_immediate(mem)) != 0x0b);
                 mem.read_mem(self.get_value16_immediate(mem))
             }
             _ => {
@@ -436,12 +443,15 @@ impl Cpu {
                 instructions::Registers::DE => {
                     mem.write_mem(self.registers.get_de(), value);
                 }
+                instructions::Registers::BC => {
+                    mem.write_mem(self.registers.get_bc(), value);
+                }
                 instructions::Registers::C => {
                     mem.write_mem(self.registers.c as u16 + 0xff00, value);
                 }
                 _ => panic!(
-                    "Addressing of register for store_value8 not possible, pc: 0x{:04x}",
-                    self.registers.pc
+                    "Addressing ({:?}) of register for store_value8 not possible, pc: 0x{:04x}",
+                    addressing, self.registers.pc
                 ),
             },
             instructions::Addressing::Register(reg) => match reg {
@@ -531,12 +541,15 @@ impl Cpu {
             instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
                 match &instruction.dst {
                     instructions::Addressing::Bit(bit) => {
-                        set = (mem.data[self.registers.get_hl() as usize] & bit) > 0;
+                        set = (mem.data[self.registers.get_hl() as usize] & (1 << bit)) > 0;
                     }
                     _ => panic!("Destination of bit() function must be a bit!"),
                 }
             }
-            _ => panic!("Must be register"),
+            _ => panic!(
+                "Must be register {:?} (pc: 0x{:04x})",
+                &instruction.src, self.registers.pc
+            ),
         }
 
         if set {
@@ -822,36 +835,40 @@ impl Cpu {
         self.registers.sp += 2;
     }
 
-    // Rotate left
-    fn rl(&mut self, instruction: &Instruction) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if self
-                    .registers
-                    .rl_reg(reg, self.registers.get_flag(Flag::Carry))
-                {
-                    self.registers.set_flag(Flag::Carry)
-                } else {
-                    self.registers.reset_flag(Flag::Carry);
-                }
+    // Rotate left throgh the carry flag
+    fn rl(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
 
-                if *self.registers.get_reg_ref(*reg) == 0 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            _ => panic!("Rotate left only available for Registers"),
+        let msb = val & 0x80 == 0x80;
+
+        val <<= 1;
+
+        if self.registers.get_flag(Flag::Carry) {
+            val |= 0x01;
         }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        if msb {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
     }
 
     // Rotate left arithmetic
-    fn rla(&mut self, instruction: &Instruction) {
+    fn rla(&mut self, instruction: &Instruction, mem: &mut Memory) {
         assert_eq!(
             instruction.opcode, 0x17,
             "rla instruction has to be opcode 0x17"
         );
-        self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x17 as usize]);
+        self.rl(&instructions::PREFIXED_INSTRUCTIONS[0x17 as usize], mem);
     }
 
     // Compare
@@ -1125,46 +1142,44 @@ impl Cpu {
     }
 
     // Shift left arithmetically
-    fn sla(&mut self, instruction: &Instruction) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if self.registers.get_reg_val(*reg) & 0x80 == 0x80 {
-                    self.registers.set_flag(Flag::Carry);
-                } else {
-                    self.registers.reset_flag(Flag::Carry);
-                }
+    fn sla(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
 
-                self.registers.sla_reg(reg);
-
-                if self.registers.get_reg_val(*reg) == 0x00 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            _ => panic!("SLA not implemented for this dst addressing"),
+        if val & 0x80 == 0x80 {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
         }
+
+        val <<= 1;
+
+        if val == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
     }
 
-    fn srl(&mut self, instruction: &Instruction, _mem: &Memory) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if self.registers.get_reg_val(*reg) & 0x01 == 0x01 {
-                    self.registers.set_flag(Flag::Carry);
-                } else {
-                    self.registers.reset_flag(Flag::Carry);
-                }
+    fn srl(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
 
-                self.registers.srl_reg(reg);
-
-                if self.registers.get_reg_val(*reg) == 0x00 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            _ => panic!("SRL not implemented for this dst addressing!"),
+        if val & 0x01 == 0x01 {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
         }
+
+        val >>= 1;
+
+        if val == 0 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
     }
 
     fn rlca(&mut self) {
@@ -1235,26 +1250,30 @@ impl Cpu {
     }
 
     // Rotate right
-    fn rr(&mut self, instruction: &Instruction, _mem: &mut Memory) {
-        match &instruction.dst {
-            instructions::Addressing::Register(reg) => {
-                if self
-                    .registers
-                    .rr_reg(reg, self.registers.get_flag(Flag::Carry))
-                {
-                    self.registers.set_flag(Flag::Carry)
-                } else {
-                    self.registers.reset_flag(Flag::Carry);
-                }
+    fn rr(&mut self, instruction: &Instruction, mem: &mut Memory) {
+        let mut val = self.get_value8(&instruction.dst, mem);
 
-                if *self.registers.get_reg_ref(*reg) == 0 {
-                    self.registers.set_flag(Flag::Zero);
-                } else {
-                    self.registers.reset_flag(Flag::Zero);
-                }
-            }
-            _ => panic!("Rotate right only available for Registers"),
+        let lsb = val & 0x01 == 0x01;
+
+        val >>= 1;
+
+        if self.registers.get_flag(Flag::Carry) {
+            val |= 0x80;
         }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        if lsb {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        self.store_value8(&instruction.dst, mem, val);
     }
 
     // Rotate right register A
@@ -1412,5 +1431,42 @@ impl Cpu {
         }
 
         self.store_value8(&instruction.dst, mem, val);
+    }
+
+    // decimal adjust accumulator
+    fn daa(&mut self) {
+        let mut val = self.registers.a;
+
+        let mut corr = if self.registers.get_flag(Flag::HalfCarry) {
+            0x06
+        } else {
+            0x00
+        };
+
+        if self.registers.get_flag(Flag::Carry) {
+            corr |= 0x60;
+        }
+
+        if self.registers.get_flag(Flag::Subtraction) {
+            val = val.wrapping_sub(corr);
+        } else {
+            corr |= if (val & 0x0f) > 0x09 { 0x06 } else { 0x00 };
+            corr |= if val > 0x99 { 0x60 } else { 0x00 };
+            val = val.wrapping_add(corr);
+        }
+
+        if val == 0x00 {
+            self.registers.set_flag(Flag::Zero);
+        } else {
+            self.registers.reset_flag(Flag::Zero);
+        }
+
+        if corr & 0x60 == 0x60 {
+            self.registers.set_flag(Flag::Carry);
+        } else {
+            self.registers.reset_flag(Flag::Carry);
+        }
+
+        self.registers.a = val;
     }
 }
