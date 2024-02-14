@@ -93,11 +93,25 @@ impl Video {
                 let base_x = WIDTH as i32 - 8 * 32 as i32 + column * 8;
                 let base_y = 800i32 + row * 8;
 
+                let index = mem[0x9800 + row as usize * 32 + column as usize] as usize;
+
                 self.draw_single_tile(
-                    mem,
-                    256 + row as usize * 32 + column as usize,
-                    base_x,
-                    base_y,
+                    mem, index, // (256 + 128) + row as usize * 32 + column as usize,
+                    base_x, base_y,
+                );
+            }
+        }
+
+        for row in 0..32 {
+            for column in 0..32 {
+                let base_x = WIDTH as i32 - 8 * (32 * 2 + 1) as i32 + column * 8;
+                let base_y = 800i32 + row * 8;
+
+                let index = mem[0x9C00 + row as usize * 32 + column as usize] as usize;
+
+                self.draw_single_tile(
+                    mem, index, //256 * 2 + row as usize * 32 + column as usize,
+                    base_x, base_y,
                 );
             }
         }
