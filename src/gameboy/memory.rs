@@ -1,4 +1,5 @@
 use crate::gameboy::joypad_input::JoypadInput;
+use crate::gameboy::timer::Timer;
 
 #[derive(Debug, PartialEq)]
 enum CartridgeType {
@@ -6,15 +7,29 @@ enum CartridgeType {
     NotImplemented,
 }
 
+pub const JOYPAD_INPUT_ADDRESS: u16 = 0xff00;
+const TIM_DIV_COUNTER: u16 = 0xff04;
+const TIM_A_COUNTER: u16 = 0xff05;
+const CPU_FREQ: u32 = 1024 * 1024;
+const TIM_A_MODULO: u16 = 0xff06;
+const TIM_A_CONTROL: u16 = 0xff07;
+
+const INTERRUPT_FLAG_REG: u16 = 0xff0f;
+
+const OAM_DMA_ADDRESS: u16 = 0xff46;
+
+const TIM_DIV_FREQ: u32 = 16384;
+
 #[derive(Debug)]
 pub struct Memory {
     pub data: [u8; ADDRESS_SPACE],
     pub joypad_input: JoypadInput,
     cartridge_type: CartridgeType,
+    timer_div: Timer,
+    timer_a: Timer,
 }
 
 pub const ADDRESS_SPACE: usize = 0x10000;
-pub const JOYPAD_INPUT_ADDRESS: usize = 0xff00;
 
 impl Memory {
     pub fn new() -> Memory {
@@ -22,6 +37,8 @@ impl Memory {
             data: [0; ADDRESS_SPACE],
             joypad_input: JoypadInput::new(),
             cartridge_type: CartridgeType::NotImplemented,
+            timer_div: Timer::new(CPU_FREQ / TIM_DIV_FREQ, true),
+            timer_a: Timer::new(0, false),
         }
     }
 
@@ -30,7 +47,6 @@ impl Memory {
         self.data[0xff40]
     }
 
-    #[allow(dead_code)]
     pub fn get_oam_entry(&self, index: u8) -> [u8; 4] {
         assert!(index < 40, "OAM index has to be lower than 40!");
         [
@@ -56,7 +72,7 @@ impl Memory {
         }
 
         // This sets all buttons to not pressed!
-        self.data[JOYPAD_INPUT_ADDRESS] = 0x0f;
+        self.data[JOYPAD_INPUT_ADDRESS as usize] = 0x0f;
     }
 
     #[allow(dead_code)]
@@ -74,7 +90,7 @@ impl Memory {
     pub fn read_mem(&self, address: u16) -> u8 {
         match address {
             // joypad input
-            0xff00 => self.get_input_reg(),
+            JOYPAD_INPUT_ADDRESS => self.get_input_reg(),
             // normal memory
             _ => self.data[address as usize],
         }
@@ -88,8 +104,6 @@ impl Memory {
 
         let real_start_address: usize = (start_addr as usize) << 8;
 
-        println!("OAM DMA for address 0x{:04x} received", real_start_address);
-
         for i in 0..0xa0 {
             self.data[0xfE00 + i] = self.data[real_start_address + i];
         }
@@ -100,9 +114,20 @@ impl Memory {
             return;
         }
 
-        if address == 0xff46 {
-            println!("OAM DMA transfer started!\n");
-            self.oam_dma(value);
+        match address {
+            OAM_DMA_ADDRESS => self.oam_dma(value),
+            TIM_DIV_COUNTER => {
+                self.data[TIM_DIV_COUNTER as usize] = 0;
+                return;
+            } // Writing to this
+            // registers resets it
+            TIM_A_MODULO => {
+                self.timer_a.update_overflow_val(value);
+            }
+            TIM_A_CONTROL => {
+                self.config_tima(value & 0x40 == 0x40, value & 0x03);
+            }
+            _ => {}
         }
 
         self.data[address as usize] = value;
@@ -145,11 +170,42 @@ impl Memory {
         println!("\n");
     }
 
+    fn config_tima(&mut self, enable: bool, clock_select: u8) {
+        if enable {
+            self.timer_a.enable();
+        } else {
+            self.timer_a.disable();
+        }
+
+        // https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#timer-and-divider-registers
+        let period = match clock_select {
+            0b00 => 256,
+            0b01 => 4,
+            0b10 => 16,
+            0b11 => 64,
+            _ => panic!("clock select should only be 3 bit!"),
+        };
+
+        self.timer_a.update_period(period);
+    }
+
     pub fn print_ie_register(&self) {
         println!("IE register: 0x{:02x}", self.data[0xffff]);
     }
 
     pub fn print_interrupt_flag_register(&self) {
         println!("Interrupt flag register: 0x{:02x}", self.data[0xff0f]);
+    }
+
+    pub fn handle_timer(&mut self, current_cycle: u64) {
+        self.timer_div
+            .increment(current_cycle, &mut self.data[TIM_DIV_COUNTER as usize]);
+
+        if self
+            .timer_div
+            .increment(current_cycle, &mut self.data[TIM_A_COUNTER as usize])
+        {
+            self.data[INTERRUPT_FLAG_REG as usize] |= 0x04;
+        }
     }
 }
