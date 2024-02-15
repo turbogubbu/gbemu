@@ -81,7 +81,14 @@ impl Memory {
     }
 
     fn oam_dma(&mut self, start_addr: u8) {
+        assert!(
+            start_addr < 0xe0,
+            "OAM dma only available from address 0x0000 to 0xdf00"
+        );
+
         let real_start_address: usize = (start_addr as usize) << 8;
+
+        println!("OAM DMA for address 0x{:04x} received", real_start_address);
 
         for i in 0..0xa0 {
             self.data[0xfE00 + i] = self.data[real_start_address + i];
@@ -93,7 +100,7 @@ impl Memory {
             return;
         }
 
-        if address == 0xfe46 {
+        if address == 0xff46 {
             println!("OAM DMA transfer started!\n");
             self.oam_dma(value);
         }

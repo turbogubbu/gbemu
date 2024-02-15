@@ -70,7 +70,8 @@ impl Ppu {
                 oam_table[3 + 4 * i],
             );
 
-            if y >= oam.y_pos && y < (oam.y_pos + obj_size) {
+            if (y + 16) >= oam.y_pos && (y + 16) < (oam.y_pos + obj_size) {
+                println!("Current scanline: {}, oam.y_pos: {}", y, oam.y_pos);
                 active_oam.push(oam);
             }
 
@@ -129,21 +130,29 @@ impl Ppu {
         if lcd_control.obj_enable {
             // println!("checking objects, size of sprites: {}", sprites.len());
             for sprite in sprites {
-                println!("Oam entry: {:?}", sprite);
+                let pos = sprite.x_pos as i16 - 8;
+                // offscreen
+                if pos >= 160 || pos == -8 {
+                    continue;
+                }
+                let y = (self.get_lcd_y(mem) + 16) - sprite.y_pos;
 
-                let pos = (sprite.x_pos as i8) as i16 - 8;
-                // println!("pos: {}", pos);
-                let y = self.get_lcd_y(mem) - sprite.y_pos;
-                let tile = self.get_tile(mem, sprite.index);
-                let tile2 = self.get_tile(mem, sprite.index + 1); // Second tile if it's a 8*16
-                                                                  // sprite
+                /*println!(
+                    "Drawing oam at lcd pos {}: {:?}",
+                    self.get_lcd_y(mem),
+                    sprite
+                );*/
+
+                // sprite
                 let sprite_pixels: [u8; 0x8];
                 // This checks if the sprite is a 8*16 pixel object, if so, when the y coordinate
                 // is >= 8 the pixel data should be fetched from the second tile of the big sprite
                 if lcd_control.obj_size && y >= 8 {
                     // panic!("obj_size = 1 is not implemented yet!\n");
+                    let tile2 = self.get_tile(mem, sprite.index + 1); // Second tile if it's a 8*16
                     sprite_pixels = core::array::from_fn(|m| tile2.get_pixel(m as u8, y - 8));
                 } else {
+                    let tile = self.get_tile(mem, sprite.index);
                     sprite_pixels = core::array::from_fn(|m| tile.get_pixel(m as u8, y));
                 }
 
@@ -152,7 +161,7 @@ impl Ppu {
                         // println!("skipping");
                         continue;
                     } else {
-                        // oam_fifo[(pos + i) as usize] = sprite_pixels[i as usize];
+                        oam_fifo[(pos + i) as usize] = sprite_pixels[i as usize];
                         // panic!("writing pixel of sprite {}", sprite_pixels[i as usize]);
                     }
                 }
