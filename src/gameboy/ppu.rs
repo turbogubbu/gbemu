@@ -182,20 +182,6 @@ impl Ppu {
             let y_tile = scy.wrapping_add(ly) % 8;
             let x_tile = scx.wrapping_add(i) % 8;
 
-            // if map_index != 0 {
-            //     println!("Drawing pixel ({},{}) from Tile {} ({},{}), scx, scy: {},{}", i, ly, map_index, x_tile, y_tile, scx, scy);
-            // }
-
-            // Problem in 0x95 subroutine to double up bits, i think this is the correct way
-            // CE ED -> F0 00 F0 00  FC 00 FC 00 FC 00 FC 00 F3 00 F3 00
-
-            // CE = 11001110 = reg a = reg c
-            // reg_c = 10011100 (assuming carry was 0) -> carry is 1
-            // reg_a = 10011101 -> carry is 1
-            // reg_c = 11001110 (bc of pop)
-            // reg_c = 10011101
-            // reg_a = 00111011 -> carry is 1
-
             bg_fifo[i as usize] = tile.get_pixel(x_tile, y_tile);
 
             if lcd_control.window_enable {
@@ -314,13 +300,6 @@ impl Tile {
         return if msbit { 2 } else { 0 } + if lsbit { 1 } else { 0 };
     }
 }
-
-/*#[derive(Debug)]
-struct TileMap {
-    tile_indexes: [u8; 32 * 32],
-}
-
-impl TileMap {}*/
 
 #[allow(dead_code)]
 #[derive(Debug)]

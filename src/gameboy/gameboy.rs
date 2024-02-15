@@ -1,6 +1,5 @@
 use std::fs;
 
-use std::io::BufWriter;
 use std::time::{Duration, Instant};
 
 use crate::gameboy::cpu::Cpu;

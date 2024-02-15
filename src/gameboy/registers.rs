@@ -56,6 +56,7 @@ impl Registers {
         }
     }
 
+    #[allow(dead_code)]
     pub fn new_after_boot_rom() -> Registers {
         Registers {
             a: 0x01,
@@ -132,21 +133,6 @@ impl Registers {
             }
             Flag::Carry => {
                 self.f |= 1 << 4;
-            }
-        }
-    }
-
-    pub fn get_reg_val(&self, reg: instructions::Registers) -> u8 {
-        match reg {
-            instructions::Registers::A => self.a,
-            instructions::Registers::B => self.b,
-            instructions::Registers::C => self.c,
-            instructions::Registers::D => self.d,
-            instructions::Registers::E => self.e,
-            instructions::Registers::H => self.h,
-            instructions::Registers::L => self.l,
-            _ => {
-                panic!("Cannot get reg ref");
             }
         }
     }
@@ -299,22 +285,6 @@ impl Registers {
         }
     }
 
-    pub fn rl_reg(&mut self, reg: &instructions::Registers, carry: bool) -> bool {
-        let val: &mut u8 = self.get_reg_ref(*reg);
-        let tmp: u8 = *val;
-        *val <<= 1;
-
-        if carry {
-            *val |= 0x1;
-        }
-
-        if tmp & 0x80 != 0 {
-            true
-        } else {
-            false
-        }
-    }
-
     pub fn rr_reg(&mut self, reg: &instructions::Registers, carry: bool) -> bool {
         let val: &mut u8 = self.get_reg_ref(*reg);
         let tmp: u8 = *val;
@@ -325,32 +295,6 @@ impl Registers {
         }
 
         if tmp & 0x01 != 0 {
-            true
-        } else {
-            false
-        }
-    }
-
-    // shift register left arithmtically
-    // retval: if zero flag should be set
-    pub fn sla_reg(&mut self, reg: &instructions::Registers) -> bool {
-        let val: &mut u8 = self.get_reg_ref(*reg);
-
-        *val <<= 1;
-
-        if *val == 0 {
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn srl_reg(&mut self, reg: &instructions::Registers) -> bool {
-        let val: &mut u8 = self.get_reg_ref(*reg);
-
-        *val >>= 1;
-
-        if *val == 0 {
             true
         } else {
             false

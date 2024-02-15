@@ -8,7 +8,7 @@ use std::process::exit;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::{Color, PixelFormatEnum};
+use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
 use sdl2::render::WindowCanvas;
 use sdl2::surface::Surface;
@@ -48,16 +48,6 @@ impl Video {
         }
     }
 
-    fn draw_pixel(&mut self, x: i32, y: i32, color: u8) {
-        self.canvas.set_draw_color(Color::RGB(
-            155 - color * 41,
-            188 - color * 62,
-            15 - color * 5,
-        ));
-        let rect: Rect = Rect::new(x, y, PIXEL, PIXEL);
-        self.canvas.draw_rect(rect).unwrap();
-    }
-
     pub fn draw_single_tile(&mut self, mem: &[u8; 0x10000], index: usize, pos_x: i32, pos_y: i32) {
         // get pixels of the tile
         let pixels = Tile::new(core::array::from_fn(|n| mem[0x8000 + index * 16 + n])).get_pixels();
@@ -83,8 +73,6 @@ impl Video {
 
             self.draw_single_tile(mem, i, base_x, base_y);
         }
-
-        // self.canvas.present();
     }
 
     pub fn draw_tile_maps(&mut self, mem: &[u8; 0x10000]) {
