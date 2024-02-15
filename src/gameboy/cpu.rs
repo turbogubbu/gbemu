@@ -1,5 +1,6 @@
-use core::time;
-use std::process::exit;
+// used for gameboy doc
+// use core::time;
+// use std::process::exit;
 
 use crate::gameboy::instructions;
 use crate::gameboy::registers::{Flag, Registers};
@@ -59,10 +60,9 @@ impl Cpu {
         print!(" IME: {}\n", self.ime);
     }
 
+    // This function is used for gameboy doc to check if the opertions work as intended
+    #[allow(dead_code)]
     pub fn log_state_to_file(&self, mem: &Memory, writer: &mut BufWriter<&File>) {
-        /*let file = std::fs::File::create("log").unwrap();
-        let mut writer = BufWriter::new(&file);*/
-
         let _ = writeln!(writer, "A:{:02X} F:{:02X} B:{:02X} C:{:02X} D:{:02X} E:{:02X} H:{:02X} L:{:02X} SP:{:04X} PC:{:04X} PCMEM:{:02X},{:02X},{:02X},{:02X}",
             self.registers.a,
             self.registers.f,
@@ -260,16 +260,8 @@ impl Cpu {
             instructions::OpType::DAA => self.daa(),
             instructions::OpType::Nop => return,
             instructions::OpType::Halt => {
-                /*println!(
-                    "Received HALT instruction at PC: 0x{:04x}, exiting program after 10 sec",
-                    self.registers.pc,
-                );*/
-
                 self.registers.pc -= 1;
-
-                /*std::thread::sleep(time::Duration::from_secs(10));
-
-                exit(0);*/
+                println!("HALT received, going to loop on this forever!");
             }
             instructions::OpType::Stop => {
                 info!(
@@ -281,10 +273,6 @@ impl Cpu {
                     self.registers.pc
                 );
             }
-            _ => panic!(
-                "Instruction not implemented: {} 0x{:02x}",
-                instruction.name, instruction.opcode
-            ),
         }
     }
 
