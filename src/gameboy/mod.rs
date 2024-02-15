@@ -6,3 +6,4 @@ pub mod joypad_input;
 pub mod memory;
 pub mod ppu;
 pub mod registers;
+pub mod timer;

@@ -102,6 +102,8 @@ impl Gameboy {
                 self.cpu.execute_single_instruction(&mut self.memory);
             }*/
 
+            self.memory.handle_timer(self.cpu.get_uptime() / 4);
+
             // ----------------- Benchmarking ------------------- //
             unsafe {
                 handle_interrupt_time = _rdtsc();
