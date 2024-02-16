@@ -6,7 +6,8 @@ use crate::gameboy::cpu::Cpu;
 use crate::gameboy::display::Display;
 use crate::gameboy::memory::Memory;
 use crate::gameboy::ppu::Ppu;
-use crate::util::video::Video;
+
+use crate::util::sdl_container::SDLContainer;
 
 use core::arch::x86_64::_rdtsc;
 
@@ -15,7 +16,7 @@ pub struct Gameboy {
     memory: Memory,
     ppu: Ppu,
     display: Display,
-    video: Video,
+    sdl_container: SDLContainer,
 }
 
 impl Gameboy {
@@ -25,7 +26,7 @@ impl Gameboy {
             memory: Memory::new(),
             ppu: Ppu::new(),
             display: Display::new(),
-            video: Video::new(),
+            sdl_container: SDLContainer::new(),
         }
     }
 
@@ -120,7 +121,7 @@ impl Gameboy {
 
             if self.cpu.loading_boot_image {
                 //self.display.draw_vram_tiles(&self.memory.data);
-                self.video.draw_vram_tiles(&self.memory.data);
+                self.sdl_container.video.draw_vram_tiles(&self.memory.data);
                 self.cpu.loading_boot_image = false;
             }
 
@@ -154,11 +155,15 @@ impl Gameboy {
                     }
                     // ----------------- Benchmarking ------------------- //
 
-                    self.video
+                    self.sdl_container
+                        .video
                         .update_gameboy_frame(&mut self.display.pixel_buffer);
-                    self.video.draw_buttons(&self.memory.joypad_input);
 
-                    self.video.present();
+                    self.sdl_container
+                        .video
+                        .draw_buttons(&self.memory.joypad_input);
+
+                    self.sdl_container.video.present();
 
                     // ----------------- Benchmarking ------------------- //
                     unsafe {
@@ -166,7 +171,7 @@ impl Gameboy {
                     }
                     // ----------------- Benchmarking ------------------- //
 
-                    self.video.write_smth();
+                    self.sdl_container.video.write_smth();
 
                     // ----------------- Benchmarking ------------------- //
                     unsafe {
@@ -189,7 +194,9 @@ impl Gameboy {
             // ----------------- Benchmarking ------------------- //
 
             if last_event_check.elapsed() >= event_interval {
-                self.video.check_events(&mut self.memory.joypad_input);
+                self.sdl_container
+                    .event
+                    .check_events(&mut self.memory.joypad_input);
                 last_event_check = Instant::now();
             }
 
@@ -200,8 +207,8 @@ impl Gameboy {
             // ----------------- Benchmarking ------------------- //
 
             if last_vram_update.elapsed() >= vram_interval {
-                self.video.draw_vram_tiles(&self.memory.data);
-                self.video.draw_tile_maps(&self.memory.data);
+                self.sdl_container.video.draw_vram_tiles(&self.memory.data);
+                self.sdl_container.video.draw_tile_maps(&self.memory.data);
                 self.cpu.print_status();
                 self.memory.print_ie_register();
                 self.memory.print_interrupt_flag_register();
