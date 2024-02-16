@@ -47,6 +47,7 @@ impl Memory {
         self.data[0xff40]
     }
 
+    #[allow(dead_code)]
     pub fn get_oam_entry(&self, index: u8) -> [u8; 4] {
         assert!(index < 40, "OAM index has to be lower than 40!");
         [
