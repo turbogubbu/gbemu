@@ -84,7 +84,10 @@ impl Gameboy {
         // For gameboy doc
         /*
         let file = std::fs::File::create("log").unwrap();
-        let mut writer = BufWriter::new(&file);*/
+        let mut writer = BufWriter::new(&file);
+        */
+
+        // self.sdl_container.audio.play_sound();
 
         loop {
             // ----------------- Benchmarking ------------------- //
@@ -103,6 +106,7 @@ impl Gameboy {
                 self.cpu.execute_single_instruction(&mut self.memory);
             }*/
 
+            // Cpu runs on 1024*1024 Hz
             self.memory.handle_timer(self.cpu.get_uptime() / 4);
 
             // ----------------- Benchmarking ------------------- //
