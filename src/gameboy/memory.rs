@@ -1,3 +1,4 @@
+use crate::gameboy::apu::Apu;
 use crate::gameboy::joypad_input::JoypadInput;
 use crate::gameboy::timer::Timer;
 
@@ -16,6 +17,15 @@ const TIM_A_CONTROL: u16 = 0xff07;
 
 const INTERRUPT_FLAG_REG: u16 = 0xff0f;
 
+const NR10_CHANNEL1_SWEEP: u16 = 0xff10;
+const NR11_CHANNEL1_LENGTH_TIMER_DUTY_CYCLE: u16 = 0xff11;
+const NR12_CHANNEL1_VOLUME_ENVELOPE: u16 = 0xff12;
+const NR13_CHANNEL1_PERIOD_LOW: u16 = 0xff13;
+const NR14_CHANNEL1_PERIOD_HIGH_CONTORL: u16 = 0xff14;
+const NR50_MASTER_VOLUME: u16 = 0xff24;
+const NR51_SOUND_PANNING: u16 = 0xff25;
+const NR52_AUDIO_MASTER_CONTROL: u16 = 0xff26;
+
 const OAM_DMA_ADDRESS: u16 = 0xff46;
 
 const TIM_DIV_FREQ: u32 = 16384;
@@ -27,6 +37,7 @@ pub struct Memory {
     cartridge_type: CartridgeType,
     timer_div: Timer,
     timer_a: Timer,
+    apu: Apu,
 }
 
 pub const ADDRESS_SPACE: usize = 0x10000;
@@ -39,6 +50,7 @@ impl Memory {
             cartridge_type: CartridgeType::NotImplemented,
             timer_div: Timer::new(CPU_FREQ / TIM_DIV_FREQ, true),
             timer_a: Timer::new(0, false),
+            apu: Apu::new(),
         }
     }
 
@@ -110,6 +122,23 @@ impl Memory {
         }
     }
 
+    fn check_channel1_trigger(&mut self, val: u8) {
+        if self.data[NR52_AUDIO_MASTER_CONTROL as usize] & 0x80 != 0x80 {
+            return;
+        }
+
+        if val & 0x80 == 0x80 {
+            self.apu.trigger_channel_1(
+                self.data[NR14_CHANNEL1_PERIOD_HIGH_CONTORL as usize],
+                self.data[NR13_CHANNEL1_PERIOD_LOW as usize],
+                self.data[NR12_CHANNEL1_VOLUME_ENVELOPE as usize],
+                self.data[NR11_CHANNEL1_LENGTH_TIMER_DUTY_CYCLE as usize],
+                self.data[NR10_CHANNEL1_SWEEP as usize],
+                self.data[TIM_DIV_COUNTER as usize],
+            );
+        }
+    }
+
     pub fn write_mem(&mut self, address: u16, value: u8) {
         if self.cartridge_type == CartridgeType::RomOnly && address <= 0x3fff {
             return;
@@ -128,6 +157,10 @@ impl Memory {
             TIM_A_CONTROL => {
                 self.config_tima(value & 0x40 == 0x40, value & 0x03);
             }
+            NR14_CHANNEL1_PERIOD_HIGH_CONTORL => {
+                self.check_channel1_trigger(value);
+            }
+
             _ => {}
         }
 
@@ -202,11 +235,19 @@ impl Memory {
         self.timer_div
             .increment(current_cycle, &mut self.data[TIM_DIV_COUNTER as usize]);
 
+        let before = self.data[TIM_DIV_COUNTER as usize];
+
         if self
             .timer_div
             .increment(current_cycle, &mut self.data[TIM_A_COUNTER as usize])
         {
             self.data[INTERRUPT_FLAG_REG as usize] |= 0x04;
+        }
+
+        // When div tim incremented, update the audio stuff
+        if before != self.data[TIM_DIV_COUNTER as usize] {
+            self.apu
+                .update_channel_1(self.data[TIM_DIV_COUNTER as usize]);
         }
     }
 }

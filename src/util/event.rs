@@ -14,9 +14,9 @@ pub struct EventHandler {
 
 impl EventHandler {
     pub fn new(sdl: &Sdl) -> EventHandler {
-        let subsys = sdl.event_pump().unwrap();
+        let event_pump = sdl.event_pump().unwrap();
 
-        EventHandler { event_pump: subsys }
+        EventHandler { event_pump }
     }
 
     pub fn check_events(&mut self, joypad: &mut JoypadInput) {

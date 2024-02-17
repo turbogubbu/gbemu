@@ -11,6 +11,7 @@ impl Ppu {
         Ppu {}
     }
 
+    /// returns true if the screen can be updated (entire screen is rendered)
     pub fn draw_line(&mut self, mem: &mut Memory, pixel_buff: &mut [u8; DIMENSIONS]) -> bool {
         self.draw_pixels(mem, pixel_buff, self.oam_scan(mem));
         self.horizontal_blank();
