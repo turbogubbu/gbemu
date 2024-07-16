@@ -35,11 +35,7 @@ impl Ppu {
             mem.data[0xff0f] |= 0x01;
         }
 
-        if mem.data[0xff44] == 0 {
-            true
-        } else {
-            false
-        }
+        mem.data[0xff44] == 0
     }
 
     fn get_lcd_control(&self, mem: &Memory) -> u8 {
@@ -72,7 +68,7 @@ impl Ppu {
             );
 
             if (y + 16) >= oam.y_pos && (y + 16) < (oam.y_pos + obj_size) {
-                println!("Current scanline: {}, oam.y_pos: {}", y, oam.y_pos);
+                // println!("Current scanline: {}, oam.y_pos: {}", y, oam.y_pos);
                 active_oam.push(oam);
             }
 
@@ -145,17 +141,16 @@ impl Ppu {
                 );*/
 
                 // sprite
-                let sprite_pixels: [u8; 0x8];
                 // This checks if the sprite is a 8*16 pixel object, if so, when the y coordinate
                 // is >= 8 the pixel data should be fetched from the second tile of the big sprite
-                if lcd_control.obj_size && y >= 8 {
+                let sprite_pixels: [u8; 0x8] = if lcd_control.obj_size && y >= 8 {
                     // panic!("obj_size = 1 is not implemented yet!\n");
                     let tile2 = self.get_tile(mem, sprite.index + 1); // Second tile if it's a 8*16
-                    sprite_pixels = core::array::from_fn(|m| tile2.get_pixel(m as u8, y - 8));
+                    core::array::from_fn(|m| tile2.get_pixel(m as u8, y - 8))
                 } else {
                     let tile = self.get_tile(mem, sprite.index);
-                    sprite_pixels = core::array::from_fn(|m| tile.get_pixel(m as u8, y));
-                }
+                    core::array::from_fn(|m| tile.get_pixel(m as u8, y))
+                };
 
                 for i in 0..8 {
                     if (pos + i) < 0 {
@@ -204,7 +199,7 @@ impl Ppu {
         }
 
         for i in 0..160 {
-            if oam_fifo[i as usize] == 0 {
+            if oam_fifo[i] == 0 {
                 pixel_buff[ly as usize * DIMENSIONS_X + i] = bg_fifo[i];
             } else {
                 pixel_buff[ly as usize * DIMENSIONS_X + i] = oam_fifo[i];
@@ -288,17 +283,9 @@ impl Tile {
         assert!(x < 8 && y < 8, "x: {}, y: {}", x, y);
         let lsbyte: u8 = self.0[y as usize * 2];
         let msbyte: u8 = self.0[y as usize * 2 + 1];
-        let lsbit: bool = if (lsbyte & (1 << (7 - x))) > 0 {
-            true
-        } else {
-            false
-        };
-        let msbit: bool = if (msbyte & (1 << (7 - x))) > 0 {
-            true
-        } else {
-            false
-        };
-        return if msbit { 2 } else { 0 } + if lsbit { 1 } else { 0 };
+        let lsbit: bool = (lsbyte & (1 << (7 - x))) > 0;
+        let msbit: bool = (msbyte & (1 << (7 - x))) > 0;
+        (if msbit { 2 } else { 0 } + if lsbit { 1 } else { 0 })
     }
 }
 

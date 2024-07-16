@@ -30,7 +30,7 @@ impl Timer {
         self.last_increment = current_cycle;
 
         let mut current_val = *reg;
-        let overflowed = if current_val == 0xff { true } else { false };
+        let overflowed = current_val == 0xff;
 
         if overflowed {
             current_val = self.overflow_value;
