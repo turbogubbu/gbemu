@@ -90,7 +90,7 @@ impl Memory {
 
     #[allow(dead_code)]
     fn get_input_reg(&self) -> u8 {
-        let higher_nibble = self.data[0xff00 as usize] >> 4;
+        let higher_nibble = self.data[0xff00_usize] >> 4;
 
         match higher_nibble {
             0x3 => 0x3f,
@@ -118,7 +118,7 @@ impl Memory {
         let real_start_address: usize = (start_addr as usize) << 8;
 
         for i in 0..0xa0 {
-            self.data[0xfE00 + i] = self.data[real_start_address + i];
+            self.data[0xfe00 + i] = self.data[real_start_address + i];
         }
     }
 
@@ -197,7 +197,7 @@ impl Memory {
             print!("{:02x} ", self.data[i as usize]);
 
             if (i + 1) % 16 == 0 {
-                print!("\n");
+                println!();
             }
         }
 

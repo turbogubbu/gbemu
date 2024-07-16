@@ -79,7 +79,7 @@ impl Registers {
             instructions::Registers::DE => self.store_de(value),
             instructions::Registers::HL => self.store_hl(value),
             instructions::Registers::SP => self.sp = value,
-            _ => assert!(false, "Wrong register to store 16 bit value!"),
+            _ => panic!("Wrong register to store 16 bit value!"),
         }
     }
 
@@ -147,8 +147,7 @@ impl Registers {
             instructions::Registers::H => &mut self.h,
             instructions::Registers::L => &mut self.l,
             _ => {
-                assert!(false, "Cannot get reg ref");
-                &mut self.a
+                panic!("Cannot get reg ref");
             }
         }
     }
@@ -172,34 +171,10 @@ impl Registers {
 
     pub fn get_flag(&self, flag: Flag) -> bool {
         match flag {
-            Flag::Zero => {
-                if (self.f & 1 << 7) == 1 << 7 {
-                    true
-                } else {
-                    false
-                }
-            }
-            Flag::Subtraction => {
-                if (self.f & 1 << 6) == 1 << 6 {
-                    true
-                } else {
-                    false
-                }
-            }
-            Flag::HalfCarry => {
-                if (self.f & 1 << 5) == 1 << 5 {
-                    true
-                } else {
-                    false
-                }
-            }
-            Flag::Carry => {
-                if self.f & 1 << 4 == 1 << 4 {
-                    true
-                } else {
-                    false
-                }
-            }
+            Flag::Zero => (self.f & 1 << 7) == (1 << 7),
+            Flag::Subtraction => (self.f & 1 << 6) == (1 << 6),
+            Flag::HalfCarry => (self.f & 1 << 5) == (1 << 5),
+            Flag::Carry => self.f & 1 << 4 == (1 << 4),
         }
     }
 
@@ -265,7 +240,7 @@ impl Registers {
             instructions::Registers::SP => {
                 self.sp = self.sp.wrapping_add(1);
             }
-            _ => assert!(false, "Dec 16 of register not available"),
+            _ => panic!("Dec 16 of register not available"),
         }
     }
 
@@ -279,8 +254,7 @@ impl Registers {
             instructions::Registers::H => self.h & (1 << bit) != 0,
             instructions::Registers::L => self.l & (1 << bit) != 0,
             _ => {
-                assert!(false, "Register not implemented for Bit");
-                false
+                panic!("Register not implemented for Bit");
             }
         }
     }
@@ -294,11 +268,7 @@ impl Registers {
             *val |= 0x80;
         }
 
-        if tmp & 0x01 != 0 {
-            true
-        } else {
-            false
-        }
+        tmp & 0x01 != 0
     }
 
     pub fn reset_bit(&mut self, reg: &instructions::Registers, bit: &u8) {

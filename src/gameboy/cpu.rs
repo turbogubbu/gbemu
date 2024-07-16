@@ -57,7 +57,7 @@ impl Cpu {
     pub fn print_status(&self) {
         println!("Cpu status:\n {}", self.registers);
         print!(" Cycles: {}", self.uptime);
-        print!(" IME: {}\n", self.ime);
+        println!(" IME: {}", self.ime);
     }
 
     // This function is used for gameboy doc to check if the opertions work as intended
@@ -74,7 +74,7 @@ impl Cpu {
             self.registers.l,
             self.registers.sp,
             self.registers.pc,
-            mem.data[0 + self.registers.pc as usize],
+            mem.data[self.registers.pc as usize],
             mem.data[1 + self.registers.pc as usize],
             mem.data[2 + self.registers.pc as usize],
             mem.data[3 + self.registers.pc as usize]);
@@ -95,17 +95,8 @@ impl Cpu {
         self.increment_pc(instruction.bytes);
         self.set_flags(&instruction.flags);
 
-        self.draw_line = if ((self.get_uptime() % 456) + instruction.cycles as u64) > 456 {
-            true
-        } else {
-            false
-        };
-
-        self.draw_image = if ((self.get_uptime() % 70224) + instruction.cycles as u64) > 70224 {
-            true
-        } else {
-            false
-        };
+        self.draw_line = ((self.get_uptime() % 456) + instruction.cycles as u64) > 456;
+        self.draw_image = ((self.get_uptime() % 70224) + instruction.cycles as u64) > 70224;
 
         if self.registers.pc == 0x40 {
             self.loading_boot_image = true;
@@ -164,7 +155,7 @@ impl Cpu {
         } else if ((interrupt_flags & 0x08) & (interrupt_enable & 0x08)) == 0x08 {
             // handle Serial
             debug!("Handling Serial interrupt");
-        } else if ((interrupt_flags & 0x10) & (interrupt_flags & 0x10)) == 0x10 {
+        } else if ((interrupt_flags & 0x10) & (interrupt_enable & 0x10)) == 0x10 {
             // handle joypad
             debug!("Handling Joypad interrupt");
         } else if interrupt_flags > 0x1f {
@@ -176,9 +167,10 @@ impl Cpu {
     }
 
     pub fn load_boot_rom(&mut self, boot_rom: Vec<u8>, mem: &mut Memory) {
-        for i in 0..0x100 {
-            mem.data[i as usize] = boot_rom[i];
-        }
+        // for i in 0..0x100 {
+        //     mem.data[i] = boot_rom[i];
+        // }
+        mem.data[..0x100].copy_from_slice(&boot_rom[..0x100]);
     }
 
     fn get_opcode(&self, mem: &Memory) -> u8 {
@@ -258,7 +250,7 @@ impl Cpu {
             instructions::OpType::RRC => self.rrc(instruction, mem),
             instructions::OpType::SRA => self.sra(instruction, mem),
             instructions::OpType::DAA => self.daa(),
-            instructions::OpType::Nop => return,
+            instructions::OpType::Nop => (),
             instructions::OpType::Halt => {
                 self.registers.pc -= 1;
                 println!("HALT received, going to loop on this forever!");
@@ -883,17 +875,16 @@ impl Cpu {
 
     // Compare
     fn cp(&mut self, instruction: &Instruction, mem: &Memory) {
-        let val: u8;
-        match instruction.dst {
+        let val: u8 = match instruction.dst {
             instructions::Addressing::Immediate8
             | instructions::Addressing::Register(_)
             | instructions::Addressing::RelativeRegister(instructions::Registers::HL) => {
-                val = self.get_value8(&instruction.dst, mem)
+                self.get_value8(&instruction.dst, mem)
             }
             _ => {
                 panic!("addressing not implemented for compare");
             }
-        }
+        };
 
         let diff: i16 = self.registers.a as i16 - val as i16;
 
@@ -1085,11 +1076,11 @@ impl Cpu {
 
     // Call to rst addr
     fn rst(&mut self, instruction: &Instruction, mem: &mut Memory) {
-        let /*mut*/ target: u16/* = 0x00*/;
+        let /*mut*/ target: u16/* = 0x00*/ = 
         match &instruction.dst {
-            instructions::Addressing::RstAddr(rstaddr) => target = *rstaddr,
+            instructions::Addressing::RstAddr(rstaddr) => *rstaddr,
             _ => panic!("addressing mode not implemented for rst instruction"),
-        }
+        };
 
         self.registers.sp -= 2;
         mem.write_mem(

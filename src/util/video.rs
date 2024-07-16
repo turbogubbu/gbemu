@@ -69,7 +69,7 @@ impl Video {
     pub fn draw_tile_maps(&mut self, mem: &[u8; 0x10000]) {
         for row in 0..32 {
             for column in 0..32 {
-                let base_x = WIDTH as i32 - 8 * 32 as i32 + column * 8;
+                let base_x = WIDTH as i32 - 8 * 32_i32 + column * 8;
                 let base_y = 800i32 + row * 8;
 
                 let index = mem[0x9800 + row as usize * 32 + column as usize] as usize;
@@ -83,7 +83,7 @@ impl Video {
 
         for row in 0..32 {
             for column in 0..32 {
-                let base_x = WIDTH as i32 - 8 * (32 * 2 + 1) as i32 + column * 8;
+                let base_x = WIDTH as i32 - 8 * (32 * 2 + 1) + column * 8;
                 let base_y = 800i32 + row * 8;
 
                 let index = mem[0x9C00 + row as usize * 32 + column as usize] as usize;
